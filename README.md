@@ -5,8 +5,8 @@ ratios, the DuPont decomposition, and market multiples — pulled live from SEC
 EDGAR's XBRL API. Download the whole thing as an Excel workbook with the
 formulas intact.
 
-Built for FIN 2010 at Utah Tech. The output matches the Module 05 Financial
-Analysis template, so the app and the spreadsheet agree line for line.
+The row layout follows the bundled Excel template in `data/template.xlsx`, so
+the web output and the downloaded workbook agree line for line.
 
 ## Run it locally
 
