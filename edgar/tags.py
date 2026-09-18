@@ -75,6 +75,18 @@ MAP = [
         "PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization",
         "PropertyPlantAndEquipmentIncludingFinanceLeaseRightOfUseAssetNet",
     ]),
+    # Memo rows. Not part of the balance sheet subtotals -- gross PP&E is the
+    # denominator of Fixed Asset Turnover, which cares about the asset base a
+    # company built, not what is left of it after depreciation.
+    ("Property, Plant & Equipment (gross)", "inst", [
+        "PropertyPlantAndEquipmentGross",
+        "PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetBeforeAccumulatedDepreciationAndAmortization",
+        "PropertyPlantAndEquipmentOther",
+    ]),
+    ("Accumulated Depreciation", "inst", [
+        "AccumulatedDepreciationDepletionAndAmortizationPropertyPlantAndEquipment",
+        "PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAccumulatedDepreciationAndAmortization",
+    ]),
     ("Goodwill & Intangible Assets", "inst", ["IntangibleAssetsNetIncludingGoodwill"]),
     ("Other Long-Term Assets", "inst", ["OtherAssetsNoncurrent"]),
     ("Total Assets", "inst", ["Assets"]),
@@ -148,11 +160,16 @@ RATIO_INPUTS = [
     "Operating Income (EBIT)", "Interest Expense", "Net Income",
     "Cash & Short-Term Investments", "Inventory", "Total Current Assets",
     "Total Assets", "Total Current Liabilities", "Total Liabilities",
-    "Total Shareholders' Equity",
+    "Total Shareholders' Equity", "Property, Plant & Equipment (gross)",
 ]
+
+# Memo rows: pulled and reported, but excluded from the balance-sheet display
+# and from the "missing data" warnings, since they are not part of any subtotal.
+MEMO_ROWS = ["Property, Plant & Equipment (gross)", "Accumulated Depreciation"]
 
 BLOCKS = {
     "Interest Expense": "Times Interest Earned",
+    "Property, Plant & Equipment (gross)": "Fixed Asset Turnover",
     "Gross Profit": "Gross Margin",
     "Cost of Revenue (COGS)": "Inventory Turnover",
     "Cash & Short-Term Investments": "Cash Ratio",

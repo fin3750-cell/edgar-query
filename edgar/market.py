@@ -21,8 +21,58 @@ UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "Chrome/125.0 Safari/537.36")}
 
 TTL = 900          # 15 minutes; intraday moves do not change a ratio's story
+SPLIT_TTL = 86400  # splits are announced weeks ahead and never change
 _cache = {}
+_split_cache = {}
 _lock = threading.Lock()
+
+
+def splits(ticker):
+    """
+    [{date: 'YYYY-MM-DD', factor: 10.0}, ...] oldest first, or [] if unknown.
+
+    EDGAR restates per-share figures for splits, but a 10-K only carries three
+    years of income statement comparatives -- so across a five-year window the
+    earliest years are still on their original, unadjusted share basis. Fixing
+    that needs the split ratios themselves, which EDGAR does not publish.
+
+    Returns [] both when a company has never split and when the lookup failed.
+    The caller distinguishes the two via `ok`.
+    """
+    import datetime
+
+    key = ticker.strip().upper()
+    now = time.monotonic()
+    with _lock:
+        hit = _split_cache.get(key)
+        if hit and now - hit[0] < SPLIT_TTL:
+            return hit[1]
+
+    try:
+        r = requests.get(QUOTE_URL.format(key), headers=UA,
+                         params={"range": "20y", "interval": "1mo",
+                                 "events": "split"}, timeout=12)
+        r.raise_for_status()
+        raw = r.json()["chart"]["result"][0].get("events", {}).get("splits", {})
+        rows = []
+        for v in raw.values():
+            den = float(v.get("denominator") or 0)
+            num = float(v.get("numerator") or 0)
+            if den <= 0 or num <= 0:
+                continue
+            rows.append({
+                "date": datetime.date.fromtimestamp(v["date"]).isoformat(),
+                "factor": num / den,
+            })
+        rows.sort(key=lambda x: x["date"])
+        out = {"splits": rows, "ok": True, "error": None}
+    except Exception as exc:                       # noqa: BLE001 - fail soft
+        out = {"splits": [], "ok": False,
+               "error": "{}: {}".format(type(exc).__name__, exc)}
+
+    with _lock:
+        _split_cache[key] = (now, out)
+    return out
 
 
 def quote(ticker):

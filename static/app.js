@@ -14,6 +14,8 @@ const ASSET_ROWS = ["Cash & Short-Term Investments", "Accounts Receivable", "Inv
 const LIAB_ROWS = ["Accounts Payable", "Short-Term Debt & Current Portion of LTD",
   "Other Current Liabilities", "Total Current Liabilities", "Long-Term Debt",
   "Other Long-Term Liabilities", "Total Liabilities", "Total Shareholders' Equity"];
+// Not part of any subtotal. Gross PP&E is the Fixed Asset Turnover denominator.
+const MEMO_ROWS = ["Property, Plant & Equipment (gross)", "Accumulated Depreciation"];
 const TOTALS = new Set(["Gross Profit", "Operating Income (EBIT)", "Net Income",
   "Total Current Assets", "Total Assets", "Total Current Liabilities",
   "Total Liabilities", "Total Shareholders' Equity"]);
@@ -85,7 +87,7 @@ function render(d) {
   const balPill = diag.reconciles ? ["ok", "Balance sheet reconciles"]
     : ["bad", "Balance sheet does NOT reconcile"];
   const ratioPill = diag.ratio_inputs_present === diag.ratio_inputs_total
-    ? ["ok", "All 14 ratios computable"]
+    ? ["ok", `All ${d.ratios.length} ratios computable`]
     : ["warn", `${diag.ratio_inputs_present}/${diag.ratio_inputs_total} ratio inputs present`];
   [balPill, ratioPill].forEach(([c, txt]) => {
     const w = el("div"); w.appendChild(el("span", "pill " + c, txt)); meta.appendChild(w);
@@ -134,6 +136,14 @@ function render(d) {
     if (m.eps_basis) mnote += ` EPS basis: ${m.eps_basis}.`;
     if (m.pe_note) mnote += ` P/E ${m.pe_note}.`;
   }
+  if (m.split_adjusted) {
+    const list = m.splits.filter((s) => s.date > (d.period_ends[0] || ""))
+      .map((s) => `${s.factor}:1 on ${s.date}`).join(", ");
+    mnote += ` EPS restated onto today's share basis for ${list}.`;
+  } else if (m.split_lookup_ok === false) {
+    mnote += " Split history unavailable, so EPS is as-filed — a split inside" +
+      " the window would break the trend.";
+  }
   outEl.appendChild(section("Market", mnote, kpis));
 
   // Statements
@@ -141,7 +151,9 @@ function render(d) {
     table(years, statementRows(IS_ROWS, d.statements), money)));
   outEl.appendChild(section("Balance sheet", "US$ millions, as filed.",
     table(years, [{ band: "Assets" }, ...statementRows(ASSET_ROWS, d.statements),
-      { band: "Liabilities & equity" }, ...statementRows(LIAB_ROWS, d.statements)], money)));
+      { band: "Liabilities & equity" }, ...statementRows(LIAB_ROWS, d.statements),
+      { band: "Memo — not part of the subtotals above" },
+      ...statementRows(MEMO_ROWS, d.statements)], money)));
 
   // Ratios
   const rrows = [];

@@ -27,6 +27,48 @@ def _row_index(ws):
     return idx
 
 
+MEMO_HEADER_ROW = 43
+MEMO_LABELS = ["Property, Plant & Equipment (gross)", "Accumulated Depreciation"]
+FAT_ROW = 30                # blank spacer in the template, right after Total Asset Turnover
+REVENUE_ROW = 10
+
+
+def _add_memo_rows(ws):
+    """
+    Gross PP&E and accumulated depreciation, written BELOW the check row.
+
+    They go at the bottom on purpose. Inserting them next to Net PP&E would
+    shift every row beneath, and openpyxl does not rewrite the formulas on the
+    Common-Size, Trend and Ratios sheets that point at fixed row numbers -- the
+    whole workbook would silently reference the wrong lines.
+    """
+    src = ws.cell(row=26, column=1)          # Property, Plant & Equipment (net)
+    ws.cell(row=MEMO_HEADER_ROW, column=1,
+            value="MEMO  -  not part of the subtotals above")
+    ws.cell(row=MEMO_HEADER_ROW, column=1).font = ws.cell(row=20, column=1).font.copy()
+    for i, label in enumerate(MEMO_LABELS):
+        r = MEMO_HEADER_ROW + 1 + i
+        c = ws.cell(row=r, column=1, value=label)
+        c.font = src.font.copy()
+        for col in range(3, 8):
+            ws.cell(row=r, column=col).number_format = \
+                ws.cell(row=26, column=col).number_format
+
+
+def _add_fixed_asset_turnover(ws_ratios, nyears):
+    """Fixed Asset Turnover = Revenue / Gross PP&E, in the EFFICIENCY block."""
+    src = ws_ratios.cell(row=29, column=1)   # Total Asset Turnover
+    c = ws_ratios.cell(row=FAT_ROW, column=1, value="Fixed Asset Turnover")
+    c.font = src.font.copy()
+    gross_row = MEMO_HEADER_ROW + 1
+    for i, col in enumerate(YCOL[:nyears]):
+        cell = ws_ratios[col + str(FAT_ROW)]
+        cell.value = ("=IF('Financial Data'!{c}{g}=0,\"\","
+                      "'Financial Data'!{c}{r}/'Financial Data'!{c}{g})").format(
+            c=col, r=REVENUE_ROW, g=gross_row)
+        cell.number_format = ws_ratios[col + "29"].number_format
+
+
 def build(result, scale=1e6, units="Millions USD"):
     """
     result: the dict returned by pull.pull()
@@ -34,6 +76,8 @@ def build(result, scale=1e6, units="Millions USD"):
     """
     wb = openpyxl.load_workbook(TEMPLATE)
     ws = wb["Financial Data"]
+    _add_memo_rows(ws)
+    _add_fixed_asset_turnover(wb["Ratios"], len(result["fiscal_years"]))
     rows = _row_index(ws)
 
     fys = result["fiscal_years"]
@@ -89,9 +133,14 @@ def _write_provenance(wb, result):
     ws["A6"] = "Retrieved"
     ws["B6"] = datetime.datetime.now().isoformat(timespec="seconds")
 
+    ends = result.get("period_ends") or [None] * len(fys)
     ws["A8"] = "Row"
     for i, y in enumerate(fys):
-        ws.cell(row=8, column=2 + i, value="FY{}".format(y))
+        # Jan/Feb year-ends are named inconsistently across filers -- Target
+        # calls its Feb-2026 close "fiscal 2025", NVDA calls its Jan-2026 close
+        # "fiscal 2026". The period end date is the only unambiguous label.
+        ws.cell(row=8, column=2 + i,
+                value="FY{}{}".format(y, "  (ended {})".format(ends[i]) if ends[i] else ""))
 
     r = 9
     for label, prov in result["provenance"].items():

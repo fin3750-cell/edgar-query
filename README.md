@@ -1,6 +1,6 @@
 # edgar-query
 
-Type a ticker, get five years of standardized financial statements, fourteen
+Type a ticker, get five years of standardized financial statements, fifteen
 ratios, the DuPont decomposition, and market multiples — pulled live from SEC
 EDGAR's XBRL API. Download the whole thing as an Excel workbook with the
 formulas intact.
@@ -46,9 +46,14 @@ Other things it handles:
 - **Unclassified balance sheets.** Banks, insurers, and firms with captive
   finance arms have no current-asset subtotal. The app says so instead of
   rendering broken liquidity ratios.
-- **Derivations.** Gross Profit, Total Liabilities, EBIT and combined
-  goodwill/intangibles are computed when not tagged directly, and marked
-  `(derived)` in the Sources tab.
+- **Derivations.** Gross Profit, Total Liabilities, EBIT, combined
+  goodwill/intangibles and gross PP&E are computed when not tagged directly, and
+  marked `(derived)` in the Sources tab.
+- **Gross PP&E.** Fixed Asset Turnover divides revenue by the asset base a
+  company built, not by what is left after depreciation. Where a filer does not
+  tag gross PP&E — Target does not — it is derived as net + accumulated
+  depreciation. Both it and accumulated depreciation are written as memo rows
+  beneath the check row, so no existing formula reference shifts.
 
 ## Market data
 
@@ -65,11 +70,34 @@ figure is genuinely missing for some perfectly ordinary companies.
 P/E is suppressed when the company lost money — a negative multiple is
 arithmetic, not information.
 
+## Split adjustment
+
+An EPS series spanning a stock split is not a trend, it is two different units.
+NVDA reported $11.93 diluted for FY2024 and $2.94 for FY2025 — a collapse that
+never happened, because a 10:1 split fell in between.
+
+EDGAR does restate per-share figures, but a 10-K only carries three years of
+income statement comparatives, so across a five-year window the earliest years
+stay on their original basis. The fix takes split ratios from Yahoo and divides
+each year's as-filed figure by the product of every split that came *after* that
+year closed. Working from the original filing is what avoids double-counting a
+restatement EDGAR already applied.
+
+NVDA, as filed: `3.85, 1.74, 11.93, 2.94, 4.90`
+NVDA, adjusted: `0.39, 0.17, 1.19, 2.94, 4.90`
+
+The adjusted figures for FY2023 and FY2024 match EDGAR's own restated values
+exactly, which is a useful independent check. The as-filed series is kept
+alongside as `eps_as_filed`.
+
 ## Known limits
 
-- **EPS is not split-adjusted.** Figures are as-filed, and original filings are
-  not restated for later splits. NVDA's EPS series jumps around because of the
-  4:1 and 10:1 splits, not because earnings did.
+- **Split adjustment depends on Yahoo.** If the lookup fails the app says so and
+  falls back to as-filed EPS rather than silently showing a broken trend.
+- **Jan/Feb fiscal years are named inconsistently by filers.** Target calls its
+  Feb-2026 close "fiscal 2025"; NVDA calls its Jan-2026 close "fiscal 2026".
+  This app labels both by the year the period mostly covers, and the Sources tab
+  prints the actual period end date for every column.
 - **Yahoo throttles cloud IPs** harder than residential ones. Quotes are cached
   15 minutes; on a free Render instance expect occasional blanks.
 - **Five years needs three filings.** A single 10-K carries two years of balance
@@ -100,8 +128,8 @@ roughly 50 seconds to wake.
 app.py              FastAPI routes
 edgar/tags.py       US-GAAP tag priority lists
 edgar/pull.py       companyfacts extraction, per-year tag resolution
-edgar/market.py     Yahoo quote, fails soft
-edgar/ratios.py     the 14 ratios, DuPont, market multiples
+edgar/market.py     Yahoo quote and split history, both fail soft
+edgar/ratios.py     the 15 ratios, DuPont, split adjustment, market multiples
 edgar/workbook.py   fills the Excel template, adds a Sources tab
 static/             single-page frontend, no build step
 data/template.xlsx  Module 05 template, formulas intact

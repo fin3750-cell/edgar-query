@@ -23,6 +23,8 @@ SPEC = [
     ("Return on Equity (ROE)", "PROFITABILITY", "Net Income",                       "Total Shareholders' Equity", "%"),
     ("Inventory Turnover",    "EFFICIENCY",     "Cost of Revenue (COGS)",           "Inventory",                 "x"),
     ("Total Asset Turnover",  "EFFICIENCY",     "Revenue (Net Sales)",              "Total Assets",              "x"),
+    ("Fixed Asset Turnover",  "EFFICIENCY",     "Revenue (Net Sales)",
+     "Property, Plant & Equipment (gross)", "x"),
 ]
 
 
@@ -91,7 +93,33 @@ def dupont(rows, fys):
     }
 
 
-def market(data, extras, fys, price, shares):
+def split_factors(period_ends, split_events):
+    """
+    Cumulative split factor per fiscal year: the product of every split that
+    happened AFTER that year closed.
+
+    Applied to an as-filed per-share figure, this restates it onto today's share
+    basis. NVDA's FY2024 10-K reported $11.93 diluted; the 10:1 split in June
+    2024 came after, so the comparable figure today is $1.19.
+
+    Working from the ORIGINAL filing and dividing by everything that came after
+    is what keeps this from double-counting -- a later filing may already have
+    restated the figure for some of those splits.
+    """
+    out = []
+    for end in period_ends:
+        if not end:
+            out.append(1.0)
+            continue
+        f = 1.0
+        for s in split_events:
+            if s["date"] > end:
+                f *= s["factor"]
+        out.append(f)
+    return out
+
+
+def market(data, extras, fys, price, shares, period_ends=None, split_events=None):
     """
     EPS, P/E, Market/Book, market cap.
 
@@ -128,8 +156,20 @@ def market(data, extras, fys, price, shares):
             eps.append(None)
             basis.append(None)
 
+    # Restate per-share figures onto today's share basis. Without this an EPS
+    # series spanning a split is not a trend, it is two different units.
+    eps_as_filed = list(eps)
+    factors = split_factors(period_ends or [None] * n, split_events or [])
+    split_applied = any(f != 1.0 for f in factors)
+    if split_applied:
+        eps = [None if eps[i] is None else eps[i] / factors[i] for i in range(n)]
+
     out = {
         "eps": eps,
+        "eps_as_filed": eps_as_filed,
+        "split_factors": factors,
+        "split_adjusted": split_applied,
+        "splits": split_events or [],
         "eps_basis": basis[latest] if basis else None,
         "eps_approximate": bool(basis) and (basis[latest] or "").startswith("approximate"),
         "price": price,

@@ -10,7 +10,7 @@ import threading
 import requests
 
 from .tags import (MAP, EXTRA, EPS_TAGS, SHARE_TAGS, MEZZANINE,
-                   RATIO_INPUTS, BLOCKS)
+                   RATIO_INPUTS, MEMO_ROWS, BLOCKS)
 
 # SEC requires a real contact string. Set SEC_CONTACT in the environment --
 # never hardcode a personal address here, this repo is public.
@@ -36,11 +36,33 @@ def _throttle(min_gap=0.12):
         _last_call[0] = time.monotonic()
 
 
-def _get(url, timeout=60):
-    _throttle()
-    r = requests.get(url, headers=UA, timeout=timeout)
-    r.raise_for_status()
-    return r
+def _get(url, timeout=60, attempts=3):
+    """
+    GET with a short backoff on transient failures.
+
+    Connection and DNS errors happen -- a cold Render instance resolving
+    www.sec.gov for the first time will occasionally fail outright -- and there
+    is no reason to surface that to the caller as a dead company. 429 and 5xx
+    are retried too; 404 and other client errors are not.
+    """
+    last = None
+    for i in range(attempts):
+        _throttle()
+        try:
+            r = requests.get(url, headers=UA, timeout=timeout)
+            if r.status_code in (429, 500, 502, 503, 504) and i < attempts - 1:
+                last = requests.HTTPError("{} from {}".format(r.status_code, url))
+                time.sleep(0.6 * (2 ** i))
+                continue
+            r.raise_for_status()
+            return r
+        except requests.exceptions.RequestException as exc:
+            last = exc
+            if isinstance(exc, requests.exceptions.HTTPError):
+                raise                       # a real 4xx -- do not hammer SEC
+            if i < attempts - 1:
+                time.sleep(0.6 * (2 ** i))
+    raise last
 
 
 def ticker_to_cik(ticker):
@@ -65,6 +87,28 @@ def fiscal_year_of(end_date):
     """
     y, m = int(end_date[:4]), int(end_date[5:7])
     return y - 1 if m <= 6 else y
+
+
+def period_ends(facts, fys):
+    """
+    {fiscal_year: period end date} taken from the Total Assets series.
+
+    Split adjustment needs to know when each fiscal year actually closed, not
+    just which calendar year it belongs to.
+    """
+    node = facts.get("Assets")
+    if not node:
+        return {}
+    out = {}
+    for e in node.get("units", {}).get("USD", []):
+        if e.get("form") not in ("10-K", "10-K/A") or e.get("fp") != "FY":
+            continue
+        if e.get("start"):
+            continue
+        y = fiscal_year_of(e["end"])
+        if y in fys and (y not in out or e["end"] > out[y]):
+            out[y] = e["end"]
+    return out
 
 
 def annual_series(facts, tag, kind, fys):
@@ -168,6 +212,24 @@ def _add(d, a, b, i):
     return (x or 0) + (y or 0)
 
 
+def _gross_ppe(d, i):
+    """
+    Gross PP&E = Net PP&E + accumulated depreciation, when the filer does not
+    tag gross directly.
+
+    Accumulated depreciation is reported as a negative number by some filers and
+    a positive one by others, so take the magnitude. This is a fallback: where a
+    company changed to the finance-lease-inclusive net tag mid-window but still
+    reports plain accumulated depreciation, the two are on slightly different
+    bases and the sum is approximate. It is marked (derived) for that reason.
+    """
+    net = _pick(d, "Property, Plant & Equipment (net)", i)
+    acc = _pick(d, "Accumulated Depreciation", i)
+    if net is None or acc is None:
+        return None
+    return net + abs(acc)
+
+
 DERIVE = {
     "Gross Profit":
         lambda d, i: _sub(d, "Revenue (Net Sales)", "Cost of Revenue (COGS)", i),
@@ -177,6 +239,7 @@ DERIVE = {
         lambda d, i: _add(d, "Goodwill", "IntangibleAssetsNetExcludingGoodwill", i),
     "Operating Income (EBIT)":
         lambda d, i: _add(d, "Pretax Income", "Interest Expense", i),
+    "Property, Plant & Equipment (gross)": _gross_ppe,
 }
 
 
@@ -240,12 +303,14 @@ def pull(ticker, nyears=5):
                                 for v in data["Interest Expense"]]
 
     shares, shares_asof = _shares_outstanding(dei)
+    pends = period_ends(gaap, set(fys))
 
     return {
         "ticker": ticker.upper(),
         "name": name,
         "cik": cik,
         "fiscal_years": fys,
+        "period_ends": [pends.get(y) for y in fys],
         "data": data,
         "provenance": prov,
         "extras": extras,
@@ -286,9 +351,11 @@ def diagnose(data, fys):
                         "diff": diff})
 
     gaps = [r for r in RATIO_INPUTS if all(v is None for v in data.get(r, [None]))]
-    missing = [k for k, v in data.items() if all(x is None for x in v)]
+    missing = [k for k, v in data.items()
+               if k not in MEMO_ROWS and all(x is None for x in v)]
     partial = [k for k, v in data.items()
-               if any(x is None for x in v) and not all(x is None for x in v)]
+               if k not in MEMO_ROWS
+               and any(x is None for x in v) and not all(x is None for x in v)]
 
     unclassified = [r for r in ("Total Current Assets", "Total Current Liabilities")
                     if all(v is None for v in data.get(r, [None]))]
