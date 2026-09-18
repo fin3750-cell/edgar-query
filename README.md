@@ -132,5 +132,5 @@ edgar/market.py     Yahoo quote and split history, both fail soft
 edgar/ratios.py     the 15 ratios, DuPont, split adjustment, market multiples
 edgar/workbook.py   fills the Excel template, adds a Sources tab
 static/             single-page frontend, no build step
-data/template.xlsx  Module 05 template, formulas intact
+data/template.xlsx  Workbook template, formulas intact
 ```

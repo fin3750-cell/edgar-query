@@ -8,9 +8,11 @@ and email in the User-Agent; requests without one get throttled or blocked.
 """
 import os
 import json
+import time
 import logging
+import threading
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -26,6 +28,56 @@ APPROVED = os.path.join(HERE, "data", "approved_companies.json")
 app = FastAPI(title="edgar-query", docs_url="/api/docs")
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+# Requests per minute per client IP, on /api/ only. Generous on purpose: a whole
+# class often sits behind one campus NAT address, so the limit has to clear a
+# room full of people rather than one person. Cached lookups cost nothing, and
+# after the first pull of a ticker everyone else is served from memory -- so this
+# is a brake on abuse, not on normal use. Raise it with RATE_LIMIT_PER_MIN, or
+# set 0 to switch it off.
+RATE_LIMIT = int(os.environ.get("RATE_LIMIT_PER_MIN", "240"))
+_buckets = {}
+_bucket_lock = threading.Lock()
+
+
+def _client_ip(request):
+    """
+    Render terminates TLS at a proxy, so request.client.host is the proxy. The
+    real caller is first in X-Forwarded-For.
+    """
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    # Static files and /healthz stay open: the health check must answer even
+    # when a caller has spent its budget, or Render reads a 429 as a dead app.
+    if RATE_LIMIT <= 0 or not request.url.path.startswith("/api/"):
+        return await call_next(request)
+
+    now = time.time()
+    window = int(now // 60)
+    key = (_client_ip(request), window)
+
+    with _bucket_lock:
+        if len(_buckets) > 4096:            # prune windows that have rolled over
+            for k in [k for k in _buckets if k[1] < window]:
+                del _buckets[k]
+        count = _buckets.get(key, 0) + 1
+        _buckets[key] = count
+
+    if count > RATE_LIMIT:
+        retry = 60 - int(now % 60)
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(retry)},
+            content={"detail": "Rate limit of {}/minute exceeded. Try again in {}s."
+                               .format(RATE_LIMIT, retry)})
+
+    return await call_next(request)
 
 
 @app.get("/healthz")

@@ -162,7 +162,7 @@ function render(d) {
     if (r.group !== group) { group = r.group; rrows.push({ band: group }); }
     rrows.push(r);
   });
-  outEl.appendChild(section("Ratios", "Period-end balances, matching the Module 05 template.",
+  outEl.appendChild(section("Ratios", "Period-end balances, matching the downloadable workbook.",
     table(years, rrows, fmt)));
 
   // DuPont
