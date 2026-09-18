@@ -5,6 +5,7 @@ Free, no API key. SEC asks only that you identify yourself in the User-Agent
 header and stay under 10 requests/second.
 """
 import os
+import copy
 import time
 import threading
 import requests
@@ -25,6 +26,16 @@ _ticker_map = None
 _ticker_lock = threading.Lock()
 _last_call = [0.0]
 _rate_lock = threading.Lock()
+
+# Processed results, keyed by (ticker, nyears). The RAW companyfacts payload
+# is deliberately NOT cached: NVDA's is several MB of JSON and many times that
+# once parsed, which would exhaust a small instance after a handful of tickers.
+# What pull() returns is a few KB and is all either endpoint needs.
+FACTS_TTL = 6 * 3600     # annual figures only move when a new 10-K lands
+CACHE_MAX = 64
+_facts_cache = {}
+_facts_lock = threading.Lock()
+_counts = [0, 0]         # [hits, misses]
 
 
 def _throttle(min_gap=0.12):
@@ -243,7 +254,7 @@ DERIVE = {
 }
 
 
-def pull(ticker, nyears=5):
+def _pull_fresh(ticker, nyears=5):
     """Return a dict of everything the app needs for one company."""
     cik, name = ticker_to_cik(ticker)
     payload = _get(FACTS_URL.format(cik), timeout=90).json()
@@ -332,6 +343,61 @@ def _shares_outstanding(dei):
             if best is None or e["end"] > best["end"]:
                 best = e
     return (best["val"], best["end"]) if best else (None, None)
+
+
+def pull(ticker, nyears=5):
+    """
+    Cached wrapper around _pull_fresh().
+
+    A class all analysing the same handful of companies is the common case, and
+    an annual figure does not change between two students loading it. Repeat
+    lookups are served from memory; only the first pays for EDGAR.
+
+    Deliberately NOT cached alongside this: the share price. app.py fetches that
+    separately through market.quote(), which keeps its own 15-minute TTL, so a
+    cached pull still yields a current P/E.
+
+    A copy goes out on every hit -- callers that mutate what they are handed
+    must not corrupt the cached entry.
+    """
+    key = (ticker.strip().upper(), nyears)
+    now = time.monotonic()
+
+    with _facts_lock:
+        hit = _facts_cache.get(key)
+        if hit and now - hit[0] < FACTS_TTL:
+            _counts[0] += 1
+            return copy.deepcopy(hit[1])
+        _counts[1] += 1
+
+    # Fetched outside the lock: a slow EDGAR round trip must not block readers
+    # already holding cached tickers. Two students racing the same cold ticker
+    # may both fetch it; that costs one extra request and is cheaper than
+    # serialising every lookup behind one mutex.
+    result = _pull_fresh(ticker, nyears)
+
+    with _facts_lock:
+        if len(_facts_cache) >= CACHE_MAX:
+            oldest = min(_facts_cache, key=lambda k: _facts_cache[k][0])
+            del _facts_cache[oldest]
+        _facts_cache[key] = (now, result)
+
+    return copy.deepcopy(result)
+
+
+def cache_stats():
+    """Counters for /healthz -- confirms the cache is actually being used."""
+    with _facts_lock:
+        return {"entries": len(_facts_cache), "hits": _counts[0],
+                "misses": _counts[1], "ttl_seconds": FACTS_TTL}
+
+
+def cache_clear():
+    """Drop every entry. For picking up a fresh filing without a redeploy."""
+    with _facts_lock:
+        n = len(_facts_cache)
+        _facts_cache.clear()
+    return n
 
 
 def diagnose(data, fys):

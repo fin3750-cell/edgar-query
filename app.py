@@ -31,7 +31,8 @@ XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 @app.get("/healthz")
 def healthz():
     configured = not pull_mod.CONTACT.startswith("edgar-query educational tool")
-    return {"ok": True, "sec_contact_configured": configured}
+    return {"ok": True, "sec_contact_configured": configured,
+            "cache": pull_mod.cache_stats()}
 
 
 @app.get("/api/companies")
