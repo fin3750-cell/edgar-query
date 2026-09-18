@@ -1,0 +1,106 @@
+:root {
+  --bg: #fbfaf8;
+  --surface: #ffffff;
+  --border: #e3ded6;
+  --text: #22201d;
+  --muted: #6d6659;
+  --accent: #8a5a2b;
+  --ok: #2f6f4a;
+  --warn: #9a6a12;
+  --bad: #9b3232;
+  --shade: #f5f2ed;
+  --radius: 8px;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171614;
+    --surface: #1f1e1b;
+    --border: #35322c;
+    --text: #ece8e1;
+    --muted: #a09889;
+    --accent: #d2a06a;
+    --ok: #6fbf8f;
+    --warn: #d9ac54;
+    --bad: #e08b8b;
+    --shade: #26241f;
+  }
+}
+* { box-sizing: border-box; }
+/* .btn-secondary sets display:inline-flex, which outranks the UA [hidden] rule
+   and leaves the download button visible before a pull has happened. */
+[hidden] { display: none !important; }
+body {
+  margin: 0; padding: 0 16px 64px;
+  background: var(--bg); color: var(--text);
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header, form, details, #status, main, footer { max-width: 1120px; margin-inline: auto; }
+header { padding: 40px 0 8px; }
+h1 { margin: 0; font-size: 26px; letter-spacing: -0.01em; }
+.sub { margin: 6px 0 0; color: var(--muted); }
+
+form { display: flex; gap: 8px; flex-wrap: wrap; margin: 24px 0 12px; }
+input, select, button, .btn-secondary {
+  font: inherit; padding: 9px 12px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
+input { flex: 1 1 200px; min-width: 0; text-transform: uppercase; }
+input::placeholder { text-transform: none; color: var(--muted); }
+button, .btn-secondary {
+  cursor: pointer; background: var(--accent); color: #fff; border-color: transparent;
+  font-weight: 600; text-decoration: none; display: inline-flex; align-items: center;
+}
+.btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+button:disabled { opacity: .55; cursor: progress; }
+
+details { margin-bottom: 16px; }
+summary { cursor: pointer; color: var(--muted); }
+.picker-body { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
+.chip {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 13px;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.group-label { width: 100%; color: var(--muted); font-size: 12px;
+  text-transform: uppercase; letter-spacing: .06em; margin-top: 8px; }
+
+#status { margin: 12px 0; color: var(--muted); min-height: 1.4em; }
+#status.error { color: var(--bad); }
+
+section { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px; margin-bottom: 18px; overflow-x: auto; }
+section h2 { margin: 0 0 4px; font-size: 16px; }
+section .note { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--border);
+  white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; white-space: normal; }
+thead th { color: var(--muted); font-size: 12px; text-transform: uppercase;
+  letter-spacing: .05em; border-bottom-width: 2px; }
+tbody tr:hover { background: var(--shade); }
+td.num { font-family: var(--mono); font-size: 13px; }
+td.blank { color: var(--muted); }
+tr.band td { background: var(--shade); font-weight: 600; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+tr.total td { font-weight: 600; }
+tr.check td { font-weight: 600; }
+
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; }
+.pill.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.pill.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.pill.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+
+.meta { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-bottom: 4px; }
+.meta div { font-size: 13px; }
+.meta span { color: var(--muted); }
+.kpis { display: flex; flex-wrap: wrap; gap: 22px; }
+.kpi { min-width: 120px; }
+.kpi b { display: block; font-size: 21px; font-weight: 650; font-family: var(--mono); }
+.kpi span { color: var(--muted); font-size: 12px; }
+
+footer { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--border);
+  color: var(--muted); font-size: 12px; }
+footer a { color: var(--accent); }

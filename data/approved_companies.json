@@ -1,0 +1,276 @@
+{
+ "Retail - general": [
+  {
+   "ticker": "WMT",
+   "name": "Walmart Inc.",
+   "revenue": 706413000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "COST",
+   "name": "COSTCO WHOLESALE CORP /NEW",
+   "revenue": 275235000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "TGT",
+   "name": "TARGET CORP",
+   "revenue": 104780000000,
+   "profitable": "5/5",
+   "gaps": [
+    "Short-term debt",
+    "PPE Gross (net only)"
+   ]
+  },
+  {
+   "ticker": "DG",
+   "name": "DOLLAR GENERAL CORP",
+   "revenue": 42724369000,
+   "profitable": "5/5",
+   "gaps": [
+    "Receivables",
+    "Short-term debt"
+   ]
+  }
+ ],
+ "Retail - specialty": [
+  {
+   "ticker": "HD",
+   "name": "HOME DEPOT, INC.",
+   "revenue": 164683000000,
+   "profitable": "5/5",
+   "gaps": [
+    "Short-term debt"
+   ]
+  },
+  {
+   "ticker": "LOW",
+   "name": "LOWES COMPANIES INC",
+   "revenue": 86286000000,
+   "profitable": "5/5",
+   "gaps": [
+    "Receivables",
+    "Short-term debt"
+   ]
+  },
+  {
+   "ticker": "BBY",
+   "name": "BEST BUY CO INC",
+   "revenue": 41691000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "ULTA",
+   "name": "Ulta Beauty, Inc.",
+   "revenue": 12392820000,
+   "profitable": "5/5",
+   "gaps": [
+    "Short-term debt",
+    "Long-term debt"
+   ]
+  },
+  {
+   "ticker": "CHWY",
+   "name": "Chewy, Inc.",
+   "revenue": 12601500000,
+   "profitable": "4/5",
+   "gaps": [
+    "Short-term debt",
+    "Long-term debt"
+   ]
+  }
+ ],
+ "Apparel & footwear": [
+  {
+   "ticker": "NKE",
+   "name": "NIKE, Inc.",
+   "revenue": 46398000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "TJX",
+   "name": "TJX COMPANIES INC /DE/",
+   "revenue": 60372000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "ROST",
+   "name": "ROSS STORES, INC.",
+   "revenue": 22750559000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "LULU",
+   "name": "lululemon athletica inc.",
+   "revenue": 11102600000,
+   "profitable": "5/5",
+   "gaps": [
+    "Long-term debt"
+   ]
+  },
+  {
+   "ticker": "CROX",
+   "name": "Crocs, Inc.",
+   "revenue": 4040647000,
+   "profitable": "4/5",
+   "gaps": []
+  }
+ ],
+ "Restaurants": [
+  {
+   "ticker": "DRI",
+   "name": "DARDEN RESTAURANTS INC",
+   "revenue": 13210900000,
+   "profitable": "5/5",
+   "gaps": [
+    "Short-term debt"
+   ]
+  },
+  {
+   "ticker": "DPZ",
+   "name": "DOMINOS PIZZA INC",
+   "revenue": 4939994000,
+   "profitable": "5/5",
+   "gaps": [
+    "Short-term debt"
+   ]
+  },
+  {
+   "ticker": "WEN",
+   "name": "Wendy's Co",
+   "revenue": 2176891000,
+   "profitable": "5/5",
+   "gaps": []
+  }
+ ],
+ "Tech - devices & chips": [
+  {
+   "ticker": "AAPL",
+   "name": "Apple Inc.",
+   "revenue": 416161000000,
+   "profitable": "5/5",
+   "gaps": [
+    "Interest Expense"
+   ]
+  },
+  {
+   "ticker": "NVDA",
+   "name": "NVIDIA CORP",
+   "revenue": 215938000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "AMD",
+   "name": "ADVANCED MICRO DEVICES INC",
+   "revenue": 34639000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "QCOM",
+   "name": "QUALCOMM INC/DE",
+   "revenue": 44284000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "DELL",
+   "name": "Dell Technologies Inc.",
+   "revenue": 113538000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "HPQ",
+   "name": "HP INC",
+   "revenue": 55295000000,
+   "profitable": "5/5",
+   "gaps": []
+  }
+ ],
+ "Tech - platform": [
+  {
+   "ticker": "AMZN",
+   "name": "AMAZON COM INC",
+   "revenue": 716924000000,
+   "profitable": "4/5",
+   "gaps": []
+  },
+  {
+   "ticker": "MSFT",
+   "name": "MICROSOFT CORP",
+   "revenue": 331839000000,
+   "profitable": "5/5",
+   "gaps": []
+  }
+ ],
+ "Consumer brands": [
+  {
+   "ticker": "PEP",
+   "name": "PEPSICO INC",
+   "revenue": 93925000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "PG",
+   "name": "PROCTER & GAMBLE Co",
+   "revenue": 87032000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "CL",
+   "name": "COLGATE PALMOLIVE CO",
+   "revenue": 20382000000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "HSY",
+   "name": "HERSHEY CO",
+   "revenue": 11692576000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "ELF",
+   "name": "e.l.f. Beauty, Inc.",
+   "revenue": 1636472000,
+   "profitable": "5/5",
+   "gaps": [
+    "Short-term debt"
+   ]
+  }
+ ],
+ "Toys & leisure": [
+  {
+   "ticker": "MAT",
+   "name": "MATTEL INC /DE/",
+   "revenue": 5347623000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "YETI",
+   "name": "YETI Holdings, Inc.",
+   "revenue": 1868494000,
+   "profitable": "5/5",
+   "gaps": []
+  },
+  {
+   "ticker": "PLNT",
+   "name": "Planet Fitness, Inc.",
+   "revenue": 1324144000,
+   "profitable": "5/5",
+   "gaps": []
+  }
+ ]
+}

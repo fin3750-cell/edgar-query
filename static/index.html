@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EDGAR Query</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>EDGAR Query</h1>
+  <p class="sub">Standardized five-year financial statements, pulled live from SEC XBRL filings.</p>
+</header>
+
+<form id="search" autocomplete="off">
+  <input id="ticker" name="ticker" placeholder="Ticker — e.g. TGT" maxlength="10" required>
+  <select id="years" name="years">
+    <option value="5" selected>5 years</option>
+    <option value="4">4 years</option>
+    <option value="3">3 years</option>
+    <option value="2">2 years</option>
+  </select>
+  <button type="submit" id="go">Pull</button>
+  <a id="xlsx" class="btn-secondary" hidden>Download .xlsx</a>
+</form>
+
+<details id="picker">
+  <summary>Browse screened companies</summary>
+  <div id="picker-body" class="picker-body">Loading…</div>
+</details>
+
+<div id="status" role="status" aria-live="polite"></div>
+<main id="out" hidden></main>
+
+<footer>
+  Source: <a href="https://www.sec.gov/edgar/sec-api-documentation" target="_blank" rel="noopener">SEC EDGAR XBRL API</a>.
+  Prices via Yahoo Finance, delayed and unofficial. Figures are as-filed and not investment advice.
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
