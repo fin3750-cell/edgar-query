@@ -84,14 +84,13 @@ async def rate_limit(request: Request, call_next):
 @app.get("/healthz")
 def healthz():
     configured = not pull_mod.CONTACT.startswith("edgar-query educational tool")
-    # A missing template is a packaging mistake, not a runtime one -- it only
-    # shows up as a 502 on the first download in that mode, which is far too
-    # late. `data/template_data_only.xlsx` was dropped by a .gitignore rule
-    # exactly this way, so the health check names them now.
-    templates = {m: os.path.exists(p) for m, p in workbook.TEMPLATES.items()}
-    return {"ok": all(templates.values()),
+    # A missing template is a packaging mistake, not a runtime one -- it would
+    # only show up as a 502 on the first download, which is far too late. A
+    # template was once dropped by a .gitignore rule exactly this way.
+    template_ok = os.path.exists(workbook.TEMPLATE)
+    return {"ok": template_ok,
             "sec_contact_configured": configured,
-            "templates": templates,
+            "template": template_ok,
             "asset_version": asset_version(),
             "cache": pull_mod.cache_stats()}
 
@@ -156,10 +155,15 @@ def company(ticker: str, years: int = Query(5, ge=2, le=5),
 
 
 @app.get("/api/company/{ticker}/xlsx")
-def company_xlsx(ticker: str, years: int = Query(5, ge=2, le=5),
-                 mode: str = Query("full", pattern="^(full|data)$")):
+def company_xlsx(ticker: str, years: int = Query(5, ge=2, le=5)):
+    """
+    Always the template: statements filled, analysis sheets labelled and empty.
+
+    There is no worked variant and no mode switch here on purpose -- a URL that
+    could be edited to hand back the answers is a URL someone will edit.
+    """
     result = _pull(ticker, years)
-    buf, fname = workbook.build(result, mode=mode)
+    buf, fname = workbook.build(result)
     return StreamingResponse(
         buf, media_type=XLSX_MIME,
         headers={"Content-Disposition": 'attachment; filename="{}"'.format(fname)})

@@ -1,14 +1,12 @@
 """
-Fill a workbook template with pulled data and hand back an .xlsx.
+Fill the workbook template with pulled data and hand back an .xlsx.
 
-Only the Financial Data sheet gets written. In the full template, Common-Size,
-Trend and Ratios are already wired with formulas pointing back at it, so they
-recalculate on open -- the download is auditable, not a picture of a spreadsheet.
+Only Financial Data and Sources get written. Common-Size, Trend and Ratios carry
+their labels, headings and formatting but no formulas -- deriving those is the
+point of handing someone the file, so the workbook never ships them worked.
 
-The data-only template is the same workbook with those formulas absent. Same
-sheets, same labels, same row numbers; the analysis cells are empty for the
-reader to build. Both come from one source of truth so a fix to the extraction
-lands in both.
+There is deliberately no formula-filled variant. It existed briefly and went out
+as a student copy by mistake; the safe design is for one not to exist.
 """
 import io
 import os
@@ -16,11 +14,7 @@ import datetime
 import openpyxl
 
 _DATA = os.path.join(os.path.dirname(__file__), "..", "data")
-TEMPLATES = {
-    "full": os.path.join(_DATA, "template.xlsx"),
-    "data": os.path.join(_DATA, "template_data_only.xlsx"),
-}
-TEMPLATE = TEMPLATES["full"]            # kept for callers that predate `mode`
+TEMPLATE = os.path.join(_DATA, "template.xlsx")
 YCOL = ["C", "D", "E", "F", "G"]        # the template holds five years
 
 # Financial Data sheet: label -> row. Read from column A at load time so a
@@ -65,18 +59,17 @@ def _add_memo_rows(ws):
                 ws.cell(row=26, column=col).number_format
 
 
-def _add_fixed_asset_turnover(ws_ratios, nyears, with_formula=True):
+def _add_fixed_asset_turnover(ws_ratios, nyears):
     """
     Fixed Asset Turnover = Revenue / Gross PP&E, in the EFFICIENCY block.
 
-    The label goes in either way. In data mode only the formula is withheld --
-    otherwise the data-only workbook would list fourteen ratios where the full
-    one lists fifteen, and the reader would never know a row was missing.
+    Label, formatting and fill only. This row is added at build time rather than
+    living in the stock template, so without it the sheet would list fourteen
+    ratios and the reader would never know one was missing.
     """
     src = ws_ratios.cell(row=29, column=1)   # Total Asset Turnover
     c = ws_ratios.cell(row=FAT_ROW, column=1, value="Fixed Asset Turnover")
     c.font = src.font.copy()
-    gross_row = MEMO_HEADER_ROW + 1
     for i, col in enumerate(YCOL[:nyears]):
         cell = ws_ratios[col + str(FAT_ROW)]
         model = ws_ratios[col + "29"]
@@ -84,27 +77,17 @@ def _add_fixed_asset_turnover(ws_ratios, nyears, with_formula=True):
         # Match the row above so the cell reads as one to fill in.
         cell.fill = model.fill.copy()
         cell.border = model.border.copy()
-        if with_formula:
-            cell.value = ("=IF('Financial Data'!{c}{g}=0,\"\","
-                          "'Financial Data'!{c}{r}/'Financial Data'!{c}{g})").format(
-                c=col, r=REVENUE_ROW, g=gross_row)
 
 
-def build(result, scale=1e6, units="Millions USD", mode="full"):
+def build(result, scale=1e6, units="Millions USD"):
     """
     result: the dict returned by pull.pull()
-    mode:   "full" writes the solved workbook; "data" writes statements only,
-            leaving every analysis cell empty.
     Returns (BytesIO, filename).
     """
-    if mode not in TEMPLATES:
-        raise ValueError("unknown mode: {}".format(mode))
-
-    wb = openpyxl.load_workbook(TEMPLATES[mode])
+    wb = openpyxl.load_workbook(TEMPLATE)
     ws = wb["Financial Data"]
     _add_memo_rows(ws)
-    _add_fixed_asset_turnover(wb["Ratios"], len(result["fiscal_years"]),
-                              with_formula=(mode == "full"))
+    _add_fixed_asset_turnover(wb["Ratios"], len(result["fiscal_years"]))
     rows = _row_index(ws)
 
     fys = result["fiscal_years"]
@@ -133,10 +116,9 @@ def build(result, scale=1e6, units="Millions USD", mode="full"):
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = "{} - {} - EDGAR {}{}.xlsx".format(
+    fname = "{} - {} - EDGAR {}.xlsx".format(
         result["ticker"], result["name"][:40].strip(),
-        datetime.date.today().isoformat(),
-        "" if mode == "full" else " (data only)")
+        datetime.date.today().isoformat())
     return buf, fname
 
 

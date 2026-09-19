@@ -4,7 +4,7 @@ const $ = (s) => document.querySelector(s);
 const form = $("#search"), tickerEl = $("#ticker"), yearsEl = $("#years");
 const goEl = $("#go"), statusEl = $("#status"), outEl = $("#out");
 const downloadsEl = $("#downloads");
-const xlsxDataEl = $("#xlsx-data"), xlsxFullEl = $("#xlsx-full");
+const xlsxEl = $("#xlsx-data");
 
 // The on-screen view. Both workbooks are always offered regardless, so this only
 // governs whether the market multiples are shown. Driven by ?mode=data in the
@@ -279,9 +279,7 @@ async function run(ticker, years) {
     if (!r.ok) throw new Error(body.detail || `HTTP ${r.status}`);
     render(body);
     statusEl.textContent = "";
-    const base = `/api/company/${encodeURIComponent(ticker)}/xlsx?years=${years}`;
-    xlsxDataEl.href = base + "&mode=data";
-    xlsxFullEl.href = base + "&mode=full";
+    xlsxEl.href = `/api/company/${encodeURIComponent(ticker)}/xlsx?years=${years}`;
     downloadsEl.hidden = false;
   } catch (err) {
     statusEl.className = "error";

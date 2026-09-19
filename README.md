@@ -8,10 +8,10 @@ formulas intact.
 The row layout follows the bundled Excel template in `data/template.xlsx`, so
 the web output and the downloaded workbook agree line for line.
 
-Two modes. **Full analysis** returns everything. **Data only** returns the
-reported statements and nothing computed from them — no ratios, no DuPont, no
-multiples — and its workbook ships the analysis sheets laid out but empty, for
-whoever is doing the analysis to fill in.
+The download is always a **template**: Financial Data and Sources filled,
+Common-Size, Trend and Ratios carrying every label and heading with the analysis
+cells empty. There is no worked variant — deriving those is the point of handing
+someone the file.
 
 ## Run it locally
 
@@ -60,39 +60,27 @@ Other things it handles:
   depreciation. Both it and accumulated depreciation are written as memo rows
   beneath the check row, so no existing formula reference shifts.
 
-## Modes
+## The download
 
-Both workbooks are always offered as two separate download buttons, so which
-file you get is never a consequence of a control set somewhere else. `?mode=full`
-(default) or `?mode=data` on `/api/company/{ticker}` and the `/xlsx` endpoint.
-`?mode=data` in the page URL also hides the market multiples on screen.
+One button, one file, no switch. `GET /api/company/{ticker}/xlsx?years=5`.
 
-| | Full analysis | Data only |
-|---|---|---|
-| Statements, memo rows, Sources | yes | yes |
-| Price, shares outstanding | yes | yes |
-| Market multiples on screen | yes | **no** |
-| Workbook analysis sheets | live formulas | labelled, empty |
+| Sheet | Shipped as |
+|---|---|
+| START HERE, Financial Data, Sources | filled |
+| Common-Size, Trend, Ratios | labels and headings, analysis cells empty |
 
-The ratio and DuPont tables are **not rendered on screen in either mode**. Working
-the ratios out is the exercise and it happens in the workbook; putting the answers
-a scroll away undercuts it. `mode=full` still returns them over the API for
-anything reading `/api` directly — the page just does not draw them.
+There is no mode parameter on the xlsx endpoint and no formula-filled template in
+the repo. A worked variant existed briefly and went out as a student copy by
+mistake, because the button followed a dropdown several controls away. A URL that
+can be edited to hand back the answers is a URL someone will edit, so the safe
+design is for the capability not to exist.
 
-Both modes run the identical extraction and differ only in presentation, so a
-tag fix lands in both at once. That is the whole reason this is a mode and not a
-second codebase — the tag map is the part that rots, and nothing else comes
-close.
+Fixed Asset Turnover is a special case: its row is not in the stock template and
+is added at build time. The label, formatting and fill are written so the sheet
+lists fifteen ratios and nobody silently builds fourteen.
 
-The split is drawn at *reported versus computed*. Price and share count stay in
-data mode because they are inputs, not results; every multiple built from them is
-withheld. The two workbook templates are the same file with and without formulas:
-same sheets, same labels, same row numbers.
-
-Fixed Asset Turnover is a special case — its row does not exist in the stock
-template and is added at build time. Data mode still writes the **label**, just
-not the formula, so the sheet lists fifteen ratios in both modes and nobody
-silently builds fourteen.
+`/api/company/{ticker}` still takes `?mode=data`, which only affects the JSON and
+the on-screen market multiples — never the workbook.
 
 ## Market data
 
@@ -168,9 +156,8 @@ app.py              FastAPI routes
 edgar/tags.py       US-GAAP tag priority lists
 edgar/pull.py       companyfacts extraction, per-year tag resolution
 edgar/market.py     Yahoo quote and split history, both fail soft
-edgar/ratios.py     the 15 ratios, DuPont, split adjustment, market multiples
-edgar/workbook.py   fills either template, adds a Sources tab
+edgar/ratios.py     ratios and DuPont (API only), split adjustment, market multiples
+edgar/workbook.py   fills the template, adds a Sources tab
 static/             single-page frontend, no build step
-data/template.xlsx  Workbook template, formulas intact
-data/template_data_only.xlsx   same workbook, analysis cells empty
+data/template.xlsx  Workbook template, analysis cells empty
 ```
