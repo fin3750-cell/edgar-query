@@ -83,7 +83,14 @@ async def rate_limit(request: Request, call_next):
 @app.get("/healthz")
 def healthz():
     configured = not pull_mod.CONTACT.startswith("edgar-query educational tool")
-    return {"ok": True, "sec_contact_configured": configured,
+    # A missing template is a packaging mistake, not a runtime one -- it only
+    # shows up as a 502 on the first download in that mode, which is far too
+    # late. `data/template_data_only.xlsx` was dropped by a .gitignore rule
+    # exactly this way, so the health check names them now.
+    templates = {m: os.path.exists(p) for m, p in workbook.TEMPLATES.items()}
+    return {"ok": all(templates.values()),
+            "sec_contact_configured": configured,
+            "templates": templates,
             "cache": pull_mod.cache_stats()}
 
 

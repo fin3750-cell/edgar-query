@@ -3,8 +3,12 @@ __pycache__/
 .venv/
 venv/
 .env
+# Generated workbooks are output, never source. The two templates under data/
+# ARE source -- whitelist the directory rather than one filename, or the next
+# template added gets silently dropped from the repo the way the data-only one
+# was.
 *.xlsx
-!data/template.xlsx
+!data/*.xlsx
 .cache/
 secfacts/
 .DS_Store
