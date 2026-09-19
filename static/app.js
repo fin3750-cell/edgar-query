@@ -226,24 +226,10 @@ function render(d) {
 
   renderStatements(d, years);
 
-  // Ratios
-  const rrows = [];
-  let group = null;
-  d.ratios.forEach((r) => {
-    if (r.group !== group) { group = r.group; rrows.push({ band: group }); }
-    rrows.push(r);
-  });
-  outEl.appendChild(section("Ratios", "Period-end balances, matching the downloadable workbook.",
-    table(years, rrows, fmt)));
-
-  // DuPont
-  const du = d.dupont;
-  const duRows = du.rows.slice();
-  duRows.push({ label: "CHECK: difference", values: du.check, format: "n", cls: "check" });
-  outEl.appendChild(section("DuPont decomposition",
-    du.ok ? "ROE = Net Profit Margin × Total Asset Turnover × Equity Multiplier. Check row is zero."
-          : "⚠ Check row is not zero — a component is missing or inconsistent.",
-    table(years, duRows, fmt)));
+  // No ratio or DuPont tables on screen, in either mode. Working the ratios out
+  // is the exercise, and it happens in the workbook -- putting the answers a
+  // scroll away undercuts it. The API still returns them under mode=full for
+  // anything reading /api directly; the page simply does not draw them.
 
   renderSources(d, years);
   outEl.hidden = false;

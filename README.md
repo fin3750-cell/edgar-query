@@ -69,8 +69,13 @@ Other things it handles:
 |---|---|---|
 | Statements, memo rows, Sources | yes | yes |
 | Price, shares outstanding | yes | yes |
-| Ratios, DuPont, multiples | yes | **no** |
+| Market multiples on screen | yes | **no** |
 | Workbook analysis sheets | live formulas | labelled, empty |
+
+The ratio and DuPont tables are **not rendered on screen in either mode**. Working
+the ratios out is the exercise and it happens in the workbook; putting the answers
+a scroll away undercuts it. `mode=full` still returns them over the API for
+anything reading `/api` directly — the page just does not draw them.
 
 Both modes run the identical extraction and differ only in presentation, so a
 tag fix lands in both at once. That is the whole reason this is a mode and not a
