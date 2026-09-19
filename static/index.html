@@ -21,9 +21,19 @@
     <option value="3">3 years</option>
     <option value="2">2 years</option>
   </select>
+  <select id="mode" name="mode">
+    <option value="full" selected>Full analysis</option>
+    <option value="data">Data only</option>
+  </select>
   <button type="submit" id="go">Pull</button>
   <a id="xlsx" class="btn-secondary" hidden>Download .xlsx</a>
 </form>
+
+<p class="mode-hint" id="mode-hint" hidden>
+  Data only returns the reported statements and nothing computed from them — no
+  ratios, no DuPont, no multiples. The workbook comes with the analysis sheets
+  laid out but empty.
+</p>
 
 <details id="picker">
   <summary>Browse screened companies</summary>

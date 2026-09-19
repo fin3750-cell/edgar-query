@@ -8,6 +8,11 @@ formulas intact.
 The row layout follows the bundled Excel template in `data/template.xlsx`, so
 the web output and the downloaded workbook agree line for line.
 
+Two modes. **Full analysis** returns everything. **Data only** returns the
+reported statements and nothing computed from them — no ratios, no DuPont, no
+multiples — and its workbook ships the analysis sheets laid out but empty, for
+whoever is doing the analysis to fill in.
+
 ## Run it locally
 
 ```bash
@@ -54,6 +59,33 @@ Other things it handles:
   tag gross PP&E — Target does not — it is derived as net + accumulated
   depreciation. Both it and accumulated depreciation are written as memo rows
   beneath the check row, so no existing formula reference shifts.
+
+## Modes
+
+`?mode=full` (default) or `?mode=data`, on both `/api/company/{ticker}` and the
+`/xlsx` endpoint.
+
+| | Full analysis | Data only |
+|---|---|---|
+| Statements, memo rows, Sources | yes | yes |
+| Price, shares outstanding | yes | yes |
+| Ratios, DuPont, multiples | yes | **no** |
+| Workbook analysis sheets | live formulas | labelled, empty |
+
+Both modes run the identical extraction and differ only in presentation, so a
+tag fix lands in both at once. That is the whole reason this is a mode and not a
+second codebase — the tag map is the part that rots, and nothing else comes
+close.
+
+The split is drawn at *reported versus computed*. Price and share count stay in
+data mode because they are inputs, not results; every multiple built from them is
+withheld. The two workbook templates are the same file with and without formulas:
+same sheets, same labels, same row numbers.
+
+Fixed Asset Turnover is a special case — its row does not exist in the stock
+template and is added at build time. Data mode still writes the **label**, just
+not the formula, so the sheet lists fifteen ratios in both modes and nobody
+silently builds fourteen.
 
 ## Market data
 
@@ -130,7 +162,8 @@ edgar/tags.py       US-GAAP tag priority lists
 edgar/pull.py       companyfacts extraction, per-year tag resolution
 edgar/market.py     Yahoo quote and split history, both fail soft
 edgar/ratios.py     the 15 ratios, DuPont, split adjustment, market multiples
-edgar/workbook.py   fills the Excel template, adds a Sources tab
+edgar/workbook.py   fills either template, adds a Sources tab
 static/             single-page frontend, no build step
 data/template.xlsx  Workbook template, formulas intact
+data/template_data_only.xlsx   same workbook, analysis cells empty
 ```

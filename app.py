@@ -97,20 +97,22 @@ def companies():
         return {}
 
 
+MODES = ("full", "data")
+
+
 @app.get("/api/company/{ticker}")
-def company(ticker: str, years: int = Query(5, ge=2, le=5)):
+def company(ticker: str, years: int = Query(5, ge=2, le=5),
+            mode: str = Query("full", pattern="^(full|data)$")):
+    """
+    mode=full  statements, ratios, DuPont and market multiples.
+    mode=data  the reported statements and nothing computed from them --
+               no ratios, no DuPont, no multiples. Price and shares outstanding
+               still come through, since those are inputs, not results.
+    """
     result = _pull(ticker, years)
 
-    rows = ratios.compute(result["data"], result["fiscal_years"])
-    q = market.quote(result["ticker"])
-    sp = market.splits(result["ticker"])
-    mkt = ratios.market(result["data"], result["extras"], result["fiscal_years"],
-                        q["price"], result["shares_outstanding"],
-                        period_ends=result["period_ends"],
-                        split_events=sp["splits"])
-    mkt["split_lookup_ok"] = sp["ok"]
-
-    return {
+    payload = {
+        "mode": mode,
         "ticker": result["ticker"],
         "name": result["name"],
         "cik": result["cik"],
@@ -118,20 +120,37 @@ def company(ticker: str, years: int = Query(5, ge=2, le=5)):
         "period_ends": result["period_ends"],
         "statements": result["data"],
         "provenance": result["provenance"],
-        "ratios": rows,
-        "dupont": ratios.dupont(rows, result["fiscal_years"]),
-        "market": mkt,
-        "quote": q,
         "shares_asof": result["shares_asof"],
         "mezzanine_note": result["mezzanine_note"],
         "diagnostics": result["diagnostics"],
     }
 
+    q = market.quote(result["ticker"])
+    payload["quote"] = q
+
+    if mode == "data":
+        payload["shares_outstanding"] = result["shares_outstanding"]
+        return payload
+
+    sp = market.splits(result["ticker"])
+    rows = ratios.compute(result["data"], result["fiscal_years"])
+    mkt = ratios.market(result["data"], result["extras"], result["fiscal_years"],
+                        q["price"], result["shares_outstanding"],
+                        period_ends=result["period_ends"],
+                        split_events=sp["splits"])
+    mkt["split_lookup_ok"] = sp["ok"]
+
+    payload["ratios"] = rows
+    payload["dupont"] = ratios.dupont(rows, result["fiscal_years"])
+    payload["market"] = mkt
+    return payload
+
 
 @app.get("/api/company/{ticker}/xlsx")
-def company_xlsx(ticker: str, years: int = Query(5, ge=2, le=5)):
+def company_xlsx(ticker: str, years: int = Query(5, ge=2, le=5),
+                 mode: str = Query("full", pattern="^(full|data)$")):
     result = _pull(ticker, years)
-    buf, fname = workbook.build(result)
+    buf, fname = workbook.build(result, mode=mode)
     return StreamingResponse(
         buf, media_type=XLSX_MIME,
         headers={"Content-Disposition": 'attachment; filename="{}"'.format(fname)})

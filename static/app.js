@@ -2,6 +2,7 @@
 
 const $ = (s) => document.querySelector(s);
 const form = $("#search"), tickerEl = $("#ticker"), yearsEl = $("#years");
+const modeEl = $("#mode"), modeHintEl = $("#mode-hint");
 const goEl = $("#go"), xlsxEl = $("#xlsx"), statusEl = $("#status"), outEl = $("#out");
 
 // Row groupings mirror the Financial Data sheet.
@@ -87,7 +88,8 @@ function render(d) {
   const balPill = diag.reconciles ? ["ok", "Balance sheet reconciles"]
     : ["bad", "Balance sheet does NOT reconcile"];
   const ratioPill = diag.ratio_inputs_present === diag.ratio_inputs_total
-    ? ["ok", `All ${d.ratios.length} ratios computable`]
+    ? ["ok", d.ratios ? `All ${d.ratios.length} ratios computable`
+                      : "All ratio inputs present"]
     : ["warn", `${diag.ratio_inputs_present}/${diag.ratio_inputs_total} ratio inputs present`];
   [balPill, ratioPill].forEach(([c, txt]) => {
     const w = el("div"); w.appendChild(el("span", "pill " + c, txt)); meta.appendChild(w);
@@ -108,7 +110,7 @@ function render(d) {
   outEl.appendChild(head);
 
   // Market
-  const m = d.market, q = d.quote;
+  const q = d.quote;
   const kpis = el("div", "kpis");
   const addKpi = (label, value) => {
     const k = el("div", "kpi");
@@ -116,6 +118,26 @@ function render(d) {
     k.appendChild(el("span", null, label));
     kpis.appendChild(k);
   };
+
+  if (d.mode === "data") {
+    // Inputs only. Price and share count are facts; every multiple built from
+    // them is a calculation, which is the reader's job in this mode.
+    addKpi("Price", q.price === null ? null : "$" + q.price.toFixed(2));
+    addKpi("Shares outstanding",
+      d.shares_outstanding ? (d.shares_outstanding / 1e6).toLocaleString("en-US",
+        { maximumFractionDigits: 1 }) + "M" : null);
+    const dnote = (q.price === null
+      ? "Price unavailable (" + (q.error || "no quote") + ")."
+      : `Price from ${q.source}, delayed.`) +
+      ` Shares outstanding as of ${d.shares_asof} (10-Q/10-K cover page).` +
+      " Market ratios are not computed in this mode.";
+    outEl.appendChild(section("Market inputs", dnote, kpis));
+    renderStatements(d, years);
+    outEl.hidden = false;
+    return;
+  }
+
+  const m = d.market;
   addKpi("Price", m.price === null ? null : "$" + m.price.toFixed(2));
   addKpi("Market cap", m.market_cap === null ? null : "$" + (m.market_cap / 1e9).toFixed(1) + "B");
   addKpi("EPS (diluted, FY" + years[years.length - 1] + ")",
@@ -146,14 +168,7 @@ function render(d) {
   }
   outEl.appendChild(section("Market", mnote, kpis));
 
-  // Statements
-  outEl.appendChild(section("Income statement", "US$ millions, as filed.",
-    table(years, statementRows(IS_ROWS, d.statements), money)));
-  outEl.appendChild(section("Balance sheet", "US$ millions, as filed.",
-    table(years, [{ band: "Assets" }, ...statementRows(ASSET_ROWS, d.statements),
-      { band: "Liabilities & equity" }, ...statementRows(LIAB_ROWS, d.statements),
-      { band: "Memo — not part of the subtotals above" },
-      ...statementRows(MEMO_ROWS, d.statements)], money)));
+  renderStatements(d, years);
 
   // Ratios
   const rrows = [];
@@ -174,31 +189,45 @@ function render(d) {
           : "⚠ Check row is not zero — a component is missing or inconsistent.",
     table(years, duRows, fmt)));
 
-  // Provenance
-  const provRows = Object.entries(d.provenance).map(([label, tags]) => ({
-    label, values: tags, format: "tag"
-  }));
-  const provTable = table(years, provRows, (v) => v === null ? null : v);
-  outEl.appendChild(section("Where each number came from",
-    "One XBRL tag per year. A row drawing on more than one tag means the filer changed presentation mid-window — expected, not an error.",
-    provTable));
-
   outEl.hidden = false;
 }
 
-async function run(ticker, years) {
+// Statements and provenance -- everything that is reported rather than derived
+// from the report. Both modes render these; only full mode goes further.
+function renderStatements(d, years) {
+  outEl.appendChild(section("Income statement", "US$ millions, as filed.",
+    table(years, statementRows(IS_ROWS, d.statements), money)));
+  outEl.appendChild(section("Balance sheet", "US$ millions, as filed.",
+    table(years, [{ band: "Assets" }, ...statementRows(ASSET_ROWS, d.statements),
+      { band: "Liabilities & equity" }, ...statementRows(LIAB_ROWS, d.statements),
+      { band: "Memo — not part of the subtotals above" },
+      ...statementRows(MEMO_ROWS, d.statements)], money)));
+
+  const provRows = Object.entries(d.provenance).map(([label, tags]) => ({
+    label, values: tags, format: "tag"
+  }));
+  outEl.appendChild(section("Where each number came from",
+    "One XBRL tag per year. A row drawing on more than one tag means the filer changed presentation mid-window — expected, not an error.",
+    table(years, provRows, (v) => v === null ? null : v)));
+}
+
+async function run(ticker, years, mode) {
+  mode = mode || modeEl.value;
   statusEl.className = "";
   statusEl.textContent = `Pulling ${ticker.toUpperCase()} from EDGAR…`;
   outEl.hidden = true;
   xlsxEl.hidden = true;
   goEl.disabled = true;
+  const qs = `years=${years}&mode=${encodeURIComponent(mode)}`;
   try {
-    const r = await fetch(`/api/company/${encodeURIComponent(ticker)}?years=${years}`);
+    const r = await fetch(`/api/company/${encodeURIComponent(ticker)}?${qs}`);
     const body = await r.json();
     if (!r.ok) throw new Error(body.detail || `HTTP ${r.status}`);
     render(body);
     statusEl.textContent = "";
-    xlsxEl.href = `/api/company/${encodeURIComponent(ticker)}/xlsx?years=${years}`;
+    xlsxEl.href = `/api/company/${encodeURIComponent(ticker)}/xlsx?${qs}`;
+    xlsxEl.textContent = mode === "data"
+      ? "Download .xlsx (data only)" : "Download .xlsx";
     xlsxEl.hidden = false;
   } catch (err) {
     statusEl.className = "error";
@@ -211,7 +240,13 @@ async function run(ticker, years) {
 form.addEventListener("submit", (e) => {
   e.preventDefault();
   const t = tickerEl.value.trim();
-  if (t) run(t, yearsEl.value);
+  if (t) run(t, yearsEl.value, modeEl.value);
+});
+
+modeEl.addEventListener("change", () => {
+  modeHintEl.hidden = modeEl.value !== "data";
+  const t = tickerEl.value.trim();
+  if (t && !outEl.hidden) run(t, yearsEl.value, modeEl.value);
 });
 
 fetch("/api/companies").then((r) => r.json()).then((groups) => {
@@ -226,7 +261,7 @@ fetch("/api/companies").then((r) => r.json()).then((groups) => {
       b.addEventListener("click", () => {
         tickerEl.value = c.ticker;
         $("#picker").open = false;
-        run(c.ticker, yearsEl.value);
+        run(c.ticker, yearsEl.value, modeEl.value);
       });
       body.appendChild(b);
     });

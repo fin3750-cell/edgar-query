@@ -54,6 +54,9 @@ button, .btn-secondary {
 .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
 button:disabled { opacity: .55; cursor: progress; }
 
+.mode-hint { max-width: 1120px; margin: -4px auto 12px; color: var(--muted);
+  font-size: 13px; line-height: 1.5; }
+
 details { margin-bottom: 16px; }
 summary { cursor: pointer; color: var(--muted); }
 .picker-body { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
