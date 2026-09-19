@@ -36,8 +36,8 @@ const el = (tag, cls, text) => {
   return n;
 };
 
-function table(years, rows, valueFmt) {
-  const t = el("table");
+function table(years, rows, valueFmt, cls) {
+  const t = el("table", cls);
   const thead = el("thead"), htr = el("tr");
   htr.appendChild(el("th", null, ""));
   years.forEach((y) => htr.appendChild(el("th", null, "FY" + y)));
@@ -56,6 +56,55 @@ function table(years, rows, valueFmt) {
     (r.values || []).forEach((v) => {
       const s = valueFmt(v, r.format);
       const td = el("td", s === null ? "num blank" : "num", s === null ? "—" : s);
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  return t;
+}
+
+// Most rows draw on the same XBRL tag every year, so five identical 70-character
+// cells is mostly noise -- and at phone width it forced the table to ~3,500px,
+// or shredded the names one character per line once they were made to wrap.
+// Collapse a uniform row into a single spanning cell and only break a row out
+// per year when the tags actually differ, which is the case worth looking at.
+function provenanceTable(years, provenance) {
+  const t = el("table", "tags");
+  const thead = el("thead"), htr = el("tr");
+  htr.appendChild(el("th", null, "Row"));
+  years.forEach((y) => htr.appendChild(el("th", null, "FY" + y)));
+  thead.appendChild(htr);
+  t.appendChild(thead);
+
+  const tb = el("tbody");
+  Object.entries(provenance).forEach(([label, tags]) => {
+    const shown = tags.map((x) => x || "not reported");
+    const tr = el("tr");
+    tr.appendChild(el("td", null, label));
+
+    // Collapse consecutive years that share a tag into one spanning cell. A row
+    // that never changed becomes a single wide cell; one that changed in FY2023
+    // becomes two. Either way each cell is wide enough to wrap at word-ish
+    // boundaries instead of one character per line.
+    let i = 0;
+    const runs = [];
+    while (i < shown.length) {
+      let j = i;
+      while (j + 1 < shown.length && shown[j + 1] === shown[i]) j++;
+      runs.push({ tag: shown[i], span: j - i + 1 });
+      i = j + 1;
+    }
+    runs.forEach((run) => {
+      const cls = run.tag === "not reported" ? "num blank"
+                : runs.length > 1 ? "num changed" : "num tag-all";
+      const td = el("td", cls, run.tag);
+      td.colSpan = run.span;
+      if (runs.length > 1 && run.tag !== "not reported") {
+        td.title = run.span === 1
+          ? "FY" + years[shown.indexOf(run.tag)]
+          : "spans " + run.span + " years";
+      }
       tr.appendChild(td);
     });
     tb.appendChild(tr);
@@ -87,10 +136,15 @@ function render(d) {
   const meta = el("div", "meta");
   const balPill = diag.reconciles ? ["ok", "Balance sheet reconciles"]
     : ["bad", "Balance sheet does NOT reconcile"];
-  const ratioPill = diag.ratio_inputs_present === diag.ratio_inputs_total
-    ? ["ok", d.ratios ? `All ${d.ratios.length} ratios computable`
-                      : "All ratio inputs present"]
-    : ["warn", `${diag.ratio_inputs_present}/${diag.ratio_inputs_total} ratio inputs present`];
+  // Data mode talks about line items, not ratios. Naming a ratio the reader is
+  // supposed to derive themselves gives part of the exercise away.
+  const dataMode = d.mode === "data";
+  const complete = diag.ratio_inputs_present === diag.ratio_inputs_total;
+  const ratioPill = complete
+    ? ["ok", dataMode ? "All line items present"
+                      : `All ${d.ratios.length} ratios computable`]
+    : ["warn", `${diag.ratio_inputs_present}/${diag.ratio_inputs_total} ` +
+               (dataMode ? "line items present" : "ratio inputs present")];
   [balPill, ratioPill].forEach(([c, txt]) => {
     const w = el("div"); w.appendChild(el("span", "pill " + c, txt)); meta.appendChild(w);
   });
@@ -105,7 +159,8 @@ function render(d) {
   const blocked = Object.entries(diag.blocked_ratios || {});
   if (blocked.length) {
     head.appendChild(el("p", "note", "Not reported by this filer: " +
-      blocked.map(([k, v]) => `${k} (blocks ${v})`).join("; ")));
+      (dataMode ? blocked.map(([k]) => k).join("; ")
+                : blocked.map(([k, v]) => `${k} (blocks ${v})`).join("; "))));
   }
   outEl.appendChild(head);
 
@@ -203,12 +258,9 @@ function renderStatements(d, years) {
       { band: "Memo — not part of the subtotals above" },
       ...statementRows(MEMO_ROWS, d.statements)], money)));
 
-  const provRows = Object.entries(d.provenance).map(([label, tags]) => ({
-    label, values: tags, format: "tag"
-  }));
   outEl.appendChild(section("Where each number came from",
     "One XBRL tag per year. A row drawing on more than one tag means the filer changed presentation mid-window — expected, not an error.",
-    table(years, provRows, (v) => v === null ? null : v)));
+    provenanceTable(years, d.provenance)));
 }
 
 async function run(ticker, years, mode) {

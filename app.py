@@ -9,11 +9,12 @@ and email in the User-Agent; requests without one get throttled or blocked.
 import os
 import json
 import time
+import hashlib
 import logging
 import threading
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
+from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from edgar import pull as pull_mod
@@ -91,6 +92,7 @@ def healthz():
     return {"ok": all(templates.values()),
             "sec_contact_configured": configured,
             "templates": templates,
+            "asset_version": asset_version(),
             "cache": pull_mod.cache_stats()}
 
 
@@ -177,9 +179,80 @@ def _pull(ticker, years):
         raise HTTPException(502, "EDGAR request failed: {}".format(exc))
 
 
+ASSET_FILES = ("index.html", "app.js", "style.css")
+_version_cache = {"key": None, "value": "0"}
+_version_lock = threading.Lock()
+
+
+def asset_version():
+    """
+    Short hash of the frontend files, keyed on their mtime and size.
+
+    Without a version stamp a deploy does not reliably reach a browser holding
+    the old bundle: StaticFiles sends an ETag but no Cache-Control, so a client
+    may reuse app.js without revalidating. That is how a stale frontend keeps
+    rendering ratios after a mode that removes them has shipped.
+
+    Computing it once at import would be enough in production, where a deploy is
+    a new process -- but it makes local editing actively worse, because the stamp
+    never changes while the browser has been told that stamp is immutable. The
+    stat() is cheap; correctness in both places is worth it.
+    """
+    key = []
+    for name in ASSET_FILES:
+        try:
+            st = os.stat(os.path.join(STATIC, name))
+            key.append((name, st.st_mtime_ns, st.st_size))
+        except OSError:
+            key.append((name, 0, 0))
+    key = tuple(key)
+
+    with _version_lock:
+        if _version_cache["key"] == key:
+            return _version_cache["value"]
+
+    h = hashlib.sha256()
+    for name in ASSET_FILES:
+        try:
+            with open(os.path.join(STATIC, name), "rb") as fh:
+                h.update(fh.read())
+        except OSError:
+            h.update(name.encode())
+    value = h.hexdigest()[:10]
+
+    with _version_lock:
+        _version_cache["key"] = key
+        _version_cache["value"] = value
+    return value
+
+
+class VersionedStatic(StaticFiles):
+    """Immutable when the URL carries ?v=, always revalidate when it does not."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        query = scope.get("query_string", b"").decode()
+        if "v=" in query:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 @app.get("/")
+@app.head("/")
 def index():
-    return FileResponse(os.path.join(STATIC, "index.html"))
+    """
+    index.html is rewritten in flight to stamp the asset version onto the script
+    and stylesheet URLs, and is itself sent no-store so the stamp is never stale.
+    """
+    with open(os.path.join(STATIC, "index.html"), encoding="utf-8") as fh:
+        html = fh.read()
+    v = asset_version()
+    html = (html
+            .replace("/static/app.js", "/static/app.js?v=" + v)
+            .replace("/static/style.css", "/static/style.css?v=" + v))
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
 @app.exception_handler(404)
@@ -187,4 +260,4 @@ def not_found(request, exc):
     return JSONResponse({"detail": getattr(exc, "detail", "Not found")}, status_code=404)
 
 
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
+app.mount("/static", VersionedStatic(directory=STATIC), name="static")
