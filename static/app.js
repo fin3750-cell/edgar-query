@@ -188,6 +188,7 @@ function render(d) {
       " Market ratios are not computed in this mode.";
     outEl.appendChild(section("Market inputs", dnote, kpis));
     renderStatements(d, years);
+    renderSources(d, years);
     outEl.hidden = false;
     return;
   }
@@ -244,11 +245,11 @@ function render(d) {
           : "⚠ Check row is not zero — a component is missing or inconsistent.",
     table(years, duRows, fmt)));
 
+  renderSources(d, years);
   outEl.hidden = false;
 }
 
-// Statements and provenance -- everything that is reported rather than derived
-// from the report. Both modes render these; only full mode goes further.
+// The reported statements. Both modes render these; only full mode goes further.
 function renderStatements(d, years) {
   outEl.appendChild(section("Income statement", "US$ millions, as filed.",
     table(years, statementRows(IS_ROWS, d.statements), money)));
@@ -257,7 +258,13 @@ function renderStatements(d, years) {
       { band: "Liabilities & equity" }, ...statementRows(LIAB_ROWS, d.statements),
       { band: "Memo — not part of the subtotals above" },
       ...statementRows(MEMO_ROWS, d.statements)], money)));
+}
 
+// Sources is an appendix and goes LAST in both modes. Folding it into
+// renderStatements put it between the balance sheet and the ratios, which
+// buried the analysis under a very long provenance table -- it read as the end
+// of the page.
+function renderSources(d, years) {
   outEl.appendChild(section("Where each number came from",
     "One XBRL tag per year. A row drawing on more than one tag means the filer changed presentation mid-window — expected, not an error.",
     provenanceTable(years, d.provenance)));
