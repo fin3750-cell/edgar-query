@@ -62,8 +62,10 @@ Other things it handles:
 
 ## Modes
 
-`?mode=full` (default) or `?mode=data`, on both `/api/company/{ticker}` and the
-`/xlsx` endpoint.
+Both workbooks are always offered as two separate download buttons, so which
+file you get is never a consequence of a control set somewhere else. `?mode=full`
+(default) or `?mode=data` on `/api/company/{ticker}` and the `/xlsx` endpoint.
+`?mode=data` in the page URL also hides the market multiples on screen.
 
 | | Full analysis | Data only |
 |---|---|---|

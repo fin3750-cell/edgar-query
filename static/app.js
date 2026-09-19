@@ -2,8 +2,18 @@
 
 const $ = (s) => document.querySelector(s);
 const form = $("#search"), tickerEl = $("#ticker"), yearsEl = $("#years");
-const modeEl = $("#mode"), modeHintEl = $("#mode-hint");
-const goEl = $("#go"), xlsxEl = $("#xlsx"), statusEl = $("#status"), outEl = $("#out");
+const goEl = $("#go"), statusEl = $("#status"), outEl = $("#out");
+const downloadsEl = $("#downloads");
+const xlsxDataEl = $("#xlsx-data"), xlsxFullEl = $("#xlsx-full");
+
+// The on-screen view. Both workbooks are always offered regardless, so this only
+// governs whether the market multiples are shown. Driven by ?mode=data in the
+// URL rather than a control, because with the ratio tables gone the two views
+// barely differ and a visible switch next to a download button was read as
+// choosing the file -- which is how a worked workbook got handed out as the
+// student one.
+const VIEW_MODE = new URLSearchParams(location.search).get("mode") === "data"
+  ? "data" : "full";
 
 // Row groupings mirror the Financial Data sheet.
 const IS_ROWS = ["Revenue (Net Sales)", "Cost of Revenue (COGS)", "Gross Profit",
@@ -256,24 +266,23 @@ function renderSources(d, years) {
     provenanceTable(years, d.provenance)));
 }
 
-async function run(ticker, years, mode) {
-  mode = mode || modeEl.value;
+async function run(ticker, years) {
   statusEl.className = "";
   statusEl.textContent = `Pulling ${ticker.toUpperCase()} from EDGAR…`;
   outEl.hidden = true;
-  xlsxEl.hidden = true;
+  downloadsEl.hidden = true;
   goEl.disabled = true;
-  const qs = `years=${years}&mode=${encodeURIComponent(mode)}`;
   try {
-    const r = await fetch(`/api/company/${encodeURIComponent(ticker)}?${qs}`);
+    const r = await fetch(`/api/company/${encodeURIComponent(ticker)}` +
+                          `?years=${years}&mode=${VIEW_MODE}`);
     const body = await r.json();
     if (!r.ok) throw new Error(body.detail || `HTTP ${r.status}`);
     render(body);
     statusEl.textContent = "";
-    xlsxEl.href = `/api/company/${encodeURIComponent(ticker)}/xlsx?${qs}`;
-    xlsxEl.textContent = mode === "data"
-      ? "Download .xlsx (data only)" : "Download .xlsx";
-    xlsxEl.hidden = false;
+    const base = `/api/company/${encodeURIComponent(ticker)}/xlsx?years=${years}`;
+    xlsxDataEl.href = base + "&mode=data";
+    xlsxFullEl.href = base + "&mode=full";
+    downloadsEl.hidden = false;
   } catch (err) {
     statusEl.className = "error";
     statusEl.textContent = err.message;
@@ -285,13 +294,7 @@ async function run(ticker, years, mode) {
 form.addEventListener("submit", (e) => {
   e.preventDefault();
   const t = tickerEl.value.trim();
-  if (t) run(t, yearsEl.value, modeEl.value);
-});
-
-modeEl.addEventListener("change", () => {
-  modeHintEl.hidden = modeEl.value !== "data";
-  const t = tickerEl.value.trim();
-  if (t && !outEl.hidden) run(t, yearsEl.value, modeEl.value);
+  if (t) run(t, yearsEl.value);
 });
 
 fetch("/api/companies").then((r) => r.json()).then((groups) => {
@@ -306,7 +309,7 @@ fetch("/api/companies").then((r) => r.json()).then((groups) => {
       b.addEventListener("click", () => {
         tickerEl.value = c.ticker;
         $("#picker").open = false;
-        run(c.ticker, yearsEl.value, modeEl.value);
+        run(c.ticker, yearsEl.value);
       });
       body.appendChild(b);
     });

@@ -21,19 +21,19 @@
     <option value="3">3 years</option>
     <option value="2">2 years</option>
   </select>
-  <select id="mode" name="mode">
-    <option value="full" selected>Full analysis</option>
-    <option value="data">Data only</option>
-  </select>
   <button type="submit" id="go">Pull</button>
-  <a id="xlsx" class="btn-secondary" hidden>Download .xlsx</a>
 </form>
 
-<p class="mode-hint" id="mode-hint" hidden>
-  Data only also hides the market multiples above, and downloads a workbook whose
-  Common-Size, Trend and Ratios sheets are laid out but empty. Full analysis
-  downloads the same workbook with every formula already wired.
-</p>
+<div class="downloads" id="downloads" hidden>
+  <a id="xlsx-data" class="btn-secondary">Download for students — no formulas</a>
+  <a id="xlsx-full" class="btn-secondary">Download worked — formulas included</a>
+  <p class="mode-hint">
+    The student workbook has Common-Size, Trend and Ratios laid out with every
+    label and heading, and every analysis cell empty. The worked one is the same
+    workbook with all the formulas wired. Financial Data and Sources are filled
+    in both.
+  </p>
+</div>
 
 <details id="picker">
   <summary>Browse screened companies</summary>
