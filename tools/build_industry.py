@@ -268,6 +268,23 @@ def sic_names():
 
 LABELS = [label for label, _g, _n, _d, _f in ratios.SPEC]
 
+# Industry P/E and P/B, which SEC cannot give us: they need a market price for
+# every filer, and EDGAR has none. Damodaran's datasets at NYU Stern do, are
+# free for non-commercial use with attribution, and are rebuilt each January.
+#
+# They are aggregates, not medians -- industry market value over industry
+# earnings and book value -- so they do NOT go in the same column as the
+# fifteen. The market block heads its own column and says whose numbers they
+# are. Using the aggregate rather than his average of company multiples is
+# deliberate: an average P/E across an industry with loss-makers in it comes out
+# at 132 for Advertising, which is a statistic about outliers. His aggregate
+# over money-making firms gives 25.5 for the same industry, and excluding the
+# loss-makers is the same rule the app already applies to a single company: a
+# P/E on a company that lost money is arithmetic, not information.
+STERN = "https://pages.stern.nyu.edu/~adamodar/pc/datasets/{}"
+STERN_PE_COL = "Aggregate Mkt Cap/ Trailing Net Income (only money making firms)"
+STERN_PB_COL = "PBV"
+
 
 def aggregate(filings, names):
     """
@@ -307,6 +324,136 @@ def aggregate(filings, names):
     return industries
 
 
+def _stern_sheet(path):
+    """(header list, rows) from the 'Industry Averages' sheet of a Stern .xls."""
+    import xlrd
+    sheet = xlrd.open_workbook(path).sheet_by_name("Industry Averages")
+    for r in range(sheet.nrows):
+        row = [str(c.value).strip() for c in sheet.row(r)]
+        if row and row[0] == "Industry Name":
+            return row, [[c.value for c in sheet.row(i)]
+                         for i in range(r + 1, sheet.nrows)]
+    raise ValueError("no header row in " + path)
+
+
+def _no_multiples(why):
+    """An empty market-multiples block that still says why it is empty."""
+    return {"source": "Damodaran, NYU Stern", "source_url": STERN.format(""),
+            "updated": None, "error": why, "by_sic": {}}
+
+
+def _stern_updated(path):
+    """
+    His 'Date updated:' cell, as an ISO date.
+
+    It is an Excel serial, and it matters: these files are rebuilt once a year,
+    so a reader needs to know whether the P/E beside their company is from this
+    January or the last one. Falling back to today's date would assert the data
+    is current when the only thing that is current is the download.
+    """
+    import xlrd
+    book = xlrd.open_workbook(path)
+    sheet = book.sheet_by_name("Industry Averages")
+    for r in range(min(6, sheet.nrows)):
+        row = sheet.row(r)
+        if str(row[0].value).strip().lower().startswith("date updated"):
+            try:
+                y, m, d = xlrd.xldate_as_tuple(float(row[1].value), book.datemode)[:3]
+                return datetime.date(y, m, d).isoformat()
+            except Exception:                           # noqa: BLE001
+                return str(row[1].value).strip() or None
+    return None
+
+
+def market_multiples():
+    """
+    {source, method, updated, by_sic: {sic: {industry, P/E, P/B, firms}}}.
+
+    The join is the awkward part: he classifies by his own ninety-five industry
+    groups, not by SIC. But `indname.xls` lists every company with BOTH its SIC
+    code and his group, so the crosswalk falls out of his own file -- take the
+    commonest group among US filers carrying each SIC.
+
+    Returns {} on any failure, including xlrd not being installed. The medians
+    are the point of this script; these two are a bonus and must not take the
+    build down with them.
+    """
+    try:
+        import xlrd                                     # noqa: F401
+    except ImportError:
+        print("  xlrd not installed, skipping industry P/E and P/B "
+              "(pip install xlrd)")
+        return _no_multiples("xlrd is not installed")
+
+    try:
+        os.makedirs(CACHE, exist_ok=True)
+        paths = {}
+        for name in ("indname.xls", "pedata.xls", "pbvdata.xls"):
+            path = os.path.join(CACHE, name)
+            if not os.path.exists(path) or os.path.getsize(path) < 10_000:
+                print("  downloading {} ...".format(name), flush=True)
+                _fetch(STERN.format(name), dest=path)
+            paths[name] = path
+
+        import collections
+        import xlrd as _xlrd
+        sheet = _xlrd.open_workbook(paths["indname.xls"]).sheet_by_index(0)
+        by_sic = collections.defaultdict(collections.Counter)
+        for r in range(1, sheet.nrows):
+            row = [str(c.value).strip() for c in sheet.row(r)]
+            # Company, Exchange:Ticker, Industry Group, Primary Sector, SIC, Country
+            if len(row) < 6 or row[5] != "United States":
+                continue
+            sic = row[4].split(".")[0].strip()
+            if sic.isdigit() and row[2]:
+                by_sic[sic.zfill(4)][row[2]] += 1
+
+        stats = {}
+        for name, col in (("pedata.xls", STERN_PE_COL), ("pbvdata.xls", STERN_PB_COL)):
+            head, rows = _stern_sheet(paths[name])
+            i = head.index(col)
+            for row in rows:
+                industry = str(row[0]).strip()
+                if not industry:
+                    continue
+                entry = stats.setdefault(industry, {})
+                try:
+                    entry["P/E" if name == "pedata.xls" else "P/B"] = float(row[i])
+                except (TypeError, ValueError):
+                    pass
+                try:
+                    entry["firms"] = int(float(row[1]))
+                except (TypeError, ValueError):
+                    pass
+
+        out = {}
+        for sic, counter in by_sic.items():
+            industry = counter.most_common(1)[0][0]
+            s = stats.get(industry)
+            if not s or ("P/E" not in s and "P/B" not in s):
+                continue
+            out[sic] = dict(s, industry=industry)
+        updated = _stern_updated(paths["pedata.xls"])
+        print("  industry P/E and P/B for {} SIC codes (Stern data {})".format(
+            len(out), updated or "undated"))
+        return {
+            "source": "Damodaran, NYU Stern",
+            "source_url": STERN.format(""),
+            "updated": updated,
+            "method": ("Industry aggregates, not medians: total market "
+                       "capitalisation over total trailing net income (money-making "
+                       "firms only, as a P/E on a loss is not information), and over "
+                       "total book value of equity. Joined to SIC through the "
+                       "commonest industry group among US filers carrying each "
+                       "code, from the same author's indname.xls."),
+            "by_sic": out,
+        }
+    except Exception as exc:                            # noqa: BLE001
+        print("  industry P/E and P/B unavailable ({}: {})".format(
+            type(exc).__name__, exc))
+        return _no_multiples("{}: {}".format(type(exc).__name__, exc))
+
+
 def main(argv):
     quarters = argv[1:] or recent_quarters(4)
     print("quarters: {}".format(", ".join(quarters)))
@@ -328,6 +475,7 @@ def main(argv):
                    "column uses. One 10-K per filer, the most recent in the window."),
         "ratios": LABELS,
         "industries": industries,
+        "market_multiples": market_multiples(),
     }
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, separators=(",", ":"), sort_keys=True)

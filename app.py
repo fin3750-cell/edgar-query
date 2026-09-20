@@ -178,7 +178,9 @@ def company_xlsx(ticker: str, years: int = Query(5, ge=2, le=5)):
     you have worked yours out.
     """
     result = _pull(ticker, years)
-    buf, fname = workbook.build(result, bench=industry.benchmark(result["cik"]))
+    buf, fname = workbook.build(result,
+                                bench=industry.benchmark(result["cik"]),
+                                quote=market.quote(result["ticker"]))
     return StreamingResponse(
         buf, media_type=XLSX_MIME,
         headers={"Content-Disposition": 'attachment; filename="{}"'.format(fname)})

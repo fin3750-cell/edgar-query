@@ -89,6 +89,32 @@ def _level_name(code):
     return {4: "SIC code", 3: "SIC group", 2: "SIC major group"}[len(code)]
 
 
+def _market_multiples(tbl, sic):
+    """
+    Industry P/E and P/B, keyed to the workbook's market-block row labels.
+
+    Kept apart from `ratios` on purpose. Those are medians we computed with the
+    template's own formulas; these are aggregates from a different author over a
+    different universe. They share a sheet, not a column, and the block that
+    prints them says whose they are.
+    """
+    out = {"available": False}
+    block = (tbl or {}).get("market_multiples") or {}
+    entry = (block.get("by_sic") or {}).get(sic or "")
+    if not entry:
+        return out
+    pairs = {label: entry[key]
+             for label, key in (("Price / Earnings (P/E)", "P/E"),
+                                ("Market / Book (P/B)", "P/B"))
+             if entry.get(key) is not None}
+    if not pairs:
+        return out
+    return {"available": True, "ratios": pairs,
+            "industry": entry.get("industry"), "firms": entry.get("firms"),
+            "source": block.get("source"), "source_url": block.get("source_url"),
+            "updated": block.get("updated"), "method": block.get("method")}
+
+
 def benchmark(cik):
     """
     {available, ratios: {label: {median, n}}, ...} for one company's industry.
@@ -102,7 +128,8 @@ def benchmark(cik):
     """
     out = {"available": False, "sic": None, "sic_description": None,
            "code": None, "level": None, "name": None, "filers": 0,
-           "ratios": {}, "built": None, "quarters": [], "note": None}
+           "ratios": {}, "built": None, "quarters": [], "note": None,
+           "market": {"available": False}}
 
     tbl = table()
     if tbl is None:
@@ -121,6 +148,8 @@ def benchmark(cik):
                        if found["error"] is None else
                        "SIC lookup failed ({})".format(found["error"]))
         return out
+
+    out["market"] = _market_multiples(tbl, found["sic"])
 
     industries = tbl.get("industries", {})
     sic = found["sic"]

@@ -45,6 +45,18 @@ BENCH_COL = "H"
 BENCH_HEADER_ROW = 8
 BENCH_NOTE_ROWS = (4, 5)
 
+# The market block starts below the DuPont footnote on row 40, for the reason
+# _add_memo_rows gives: appending shifts nothing, and openpyxl will not rewrite
+# the fixed row references that Common-Size, Trend and Ratios point at.
+MARKET_ROW = 42
+
+# Colours lifted from the template rather than invented, so the block reads as
+# part of the same sheet: yellow means "this number is given", green means "you
+# write the formula", and the two are what START HERE already explains.
+FILL_GIVEN = "FFF2CC"
+FILL_FORMULA = "E8F5E9"
+FILL_HEADER = "DCE6F1"
+
 
 def _add_memo_rows(ws):
     """
@@ -67,6 +79,149 @@ def _add_memo_rows(ws):
             ws.cell(row=r, column=col).number_format = \
                 ws.cell(row=26, column=col).number_format
 
+
+
+def _add_market_block(ws, result, quote, bench):
+    """
+    MARKET RATIOS, below the DuPont section.
+
+    These are the ratios EDGAR alone cannot produce, and they are the reason
+    the block has to look different from the four above it. Everything on this
+    sheet so far divides one figure on Financial Data by another. P/E cannot:
+    it needs a share price, which is not in a filing and not on that sheet.
+
+    So the price and the share count arrive filled in, in the template's yellow
+    -- givens, like the Financial Data sheet itself -- and the five rows under
+    them stay green and empty. The unit trap is the interesting part and the
+    hints say so out loud: Financial Data is in millions, so a share count in
+    millions divides into it to give dollars per share, and market cap comes out
+    in millions to match the statements beside it.
+    """
+    r = MARKET_ROW
+    label_font = ws["A33"].font.copy()
+    hint_font = ws["I10"].font.copy()
+    model = ws["C33"]                       # a green DuPont cell: borders, look
+
+    head = ws.cell(row=r, column=1,
+                   value="MARKET RATIOS  -  what the market pays for what you just measured")
+    head.font = ws["A31"].font.copy()
+    head.fill = ws["A31"].fill.copy()
+    r += 1
+
+    note = ws.cell(row=r, column=1, value=(
+        "Two numbers EDGAR does not publish are filled in for you. The rest are yours. "
+        "Financial Data is in millions, so keep the share count in millions too."))
+    note.font = ws["A40"].font.copy()
+    r += 2
+
+    hdr = ws.cell(row=r, column=1, value="As of")
+    hdr.font = ws["C8"].font.copy()
+    asof = ws.cell(row=r, column=3, value=_quote_date(quote)
+                   or datetime.date.today().isoformat())
+    asof.font = ws["C8"].font.copy()
+    asof.fill = openpyxl.styles.PatternFill("solid", fgColor=FILL_HEADER)
+    market_bench = (bench or {}).get("market") or {}
+    if market_bench.get("available"):
+        ind = ws.cell(row=r, column=8, value="Industry")
+        ind.font = ws["C8"].font.copy()
+        ind.fill = openpyxl.styles.PatternFill("solid", fgColor=FILL_HEADER)
+        # H is a 2-wide spacer in the stock template. _write_benchmark widens it
+        # when there are medians to show, but a bank has no medians and still
+        # gets a P/E -- the multiples do not depend on the revenue rows that
+        # made it unsuitable -- so the width has to be set here too.
+        ws.column_dimensions[BENCH_COL].width = max(
+            ws.column_dimensions[BENCH_COL].width or 0, 15)
+    r += 1
+
+    price = (quote or {}).get("price")
+    shares = result.get("shares_outstanding")
+
+    # label, kind, value, number format, hint.
+    #
+    # "given" and "formula" are decided by the row, never by whether a value
+    # turned up. A failed price lookup leaves the price row yellow and empty
+    # with the reason beside it; colouring it green instead would tell the
+    # reader to go and derive a share price, which is not a thing they can do
+    # from this workbook.
+    rows = [
+        ("Share price (USD)", "given", price, "#,##0.00",
+         _price_note(quote)),
+        ("Shares outstanding (millions)", "given",
+         None if not shares else round(shares / 1e6, 1), "#,##0.0",
+         result.get("shares_source") if shares
+         else "not resolved - fill this in yourself"),
+        ("Earnings per Share (EPS)", "formula", None, "#,##0.00",
+         "Net Income / Shares outstanding  -  millions over millions gives dollars"),
+        ("Book Value per Share", "formula", None, "#,##0.00",
+         "Total Shareholders' Equity / Shares outstanding"),
+        ("Market Capitalisation (millions)", "formula", None, "#,##0.0",
+         "Share price x Shares outstanding"),
+        ("Price / Earnings (P/E)", "formula", None, "0.00",
+         "Share price / Earnings per Share"),
+        ("Market / Book (P/B)", "formula", None, "0.00",
+         "Share price / Book Value per Share"),
+    ]
+
+    for label, kind, value, fmt, hint in rows:
+        ws.cell(row=r, column=1, value=label).font = label_font
+        cell = ws.cell(row=r, column=3)
+        cell.number_format = fmt
+        cell.border = model.border.copy()
+        cell.fill = openpyxl.styles.PatternFill(
+            "solid", fgColor=FILL_GIVEN if kind == "given" else FILL_FORMULA)
+        if value is not None:
+            cell.value = value
+        h = ws.cell(row=r, column=9,
+                    value=("Given - " if kind == "given" else "") + hint)
+        h.font = hint_font
+
+        entry = market_bench.get("ratios", {}).get(label)
+        if entry is not None:
+            b = ws.cell(row=r, column=8, value=round(entry, 2))
+            b.number_format = fmt
+            b.border = model.border.copy()
+        r += 1
+
+    r += 1
+    tail = ws.cell(row=r, column=1, value=(
+        "A P/E on a company that lost money is arithmetic, not information. If your EPS "
+        "is negative, say so rather than printing the number."))
+    tail.font = ws["A40"].font.copy()
+    r += 1
+
+    if market_bench.get("available"):
+        src = ws.cell(row=r, column=1, value=(
+            "Industry column: {} for {}, {}. These two are aggregates -- industry "
+            "market value over industry earnings and book value -- not medians like "
+            "column H above, and they come from a different source. See Sources."
+            .format(market_bench.get("source"), market_bench.get("industry"),
+                    market_bench.get("updated"))))
+        src.font = ws["A40"].font.copy()
+    return r
+
+
+def _quote_date(quote):
+    """market.quote() carries Yahoo's raw epoch seconds; the sheet wants a date."""
+    ts = (quote or {}).get("as_of")
+    if not ts:
+        return None
+    try:
+        return datetime.datetime.fromtimestamp(int(ts)).date().isoformat()
+    except (ValueError, OSError, OverflowError):
+        return None
+
+
+def _price_note(quote):
+    """One phrase saying where the price came from, or why there isn't one."""
+    if not quote or quote.get("price") is None:
+        return "no price available ({})".format(
+            (quote or {}).get("error") or "lookup not attempted")
+    bits = [quote.get("source") or "market data"]
+    if quote.get("exchange"):
+        bits.append(quote["exchange"])
+    if _quote_date(quote):
+        bits.append(_quote_date(quote))
+    return ", ".join(bits)
 
 
 def _write_benchmark(ws, bench):
@@ -122,16 +277,18 @@ def _write_benchmark(ws, bench):
     ws.column_dimensions[BENCH_COL].width = 15
 
 
-def build(result, scale=1e6, units="Millions USD", bench=None):
+def build(result, scale=1e6, units="Millions USD", bench=None, quote=None):
     """
     result: the dict returned by pull.pull()
     bench:  industry.benchmark(cik), or None to omit the benchmark column
+    quote:  market.quote(ticker), or None -- the price row then says so
     Returns (BytesIO, filename).
     """
     wb = openpyxl.load_workbook(TEMPLATE)
     ws = wb["Financial Data"]
     _add_memo_rows(ws)
     _write_benchmark(wb["Ratios"], bench)
+    _add_market_block(wb["Ratios"], result, quote, bench)
     rows = _row_index(ws)
 
     fys = result["fiscal_years"]
@@ -279,5 +436,43 @@ def _write_benchmark_sources(ws, r, bench):
             # derived from.
             ws.cell(row=r, column=2, value="no benchmark")
             ws.cell(row=r, column=3, value="too few filers report the inputs")
+        r += 1
+
+    return _write_market_sources(ws, r + 1, bench)
+
+
+def _write_market_sources(ws, r, bench):
+    """
+    The market block's industry column, which is somebody else's data.
+
+    It gets its own heading rather than being folded into the table above,
+    because it is not the same kind of number: an aggregate, from a different
+    author, over a different universe, rebuilt once a year rather than
+    quarterly. Anyone comparing the two should be able to see that without
+    having to know it already.
+    """
+    mkt = (bench or {}).get("market") or {}
+    if not mkt.get("available"):
+        return r
+
+    ws.cell(row=r, column=1, value="Industry P/E and P/B")
+    r += 1
+    for label, value in (
+            ("Source", "{} - {}".format(mkt.get("source"), mkt.get("source_url"))),
+            ("Their industry group", "{}{}".format(
+                mkt.get("industry"),
+                "  ({} firms)".format(mkt["firms"]) if mkt.get("firms") else "")),
+            ("Data updated", mkt.get("updated") or "undated"),
+            ("Method", mkt.get("method") or ""),
+            ("Not comparable with", "the medians above -- different source, "
+                                    "different universe, aggregates not medians"),
+    ):
+        ws.cell(row=r, column=1, value=label)
+        ws.cell(row=r, column=2, value=value)
+        r += 1
+
+    for label, value in (mkt.get("ratios") or {}).items():
+        ws.cell(row=r, column=1, value=label)
+        ws.cell(row=r, column=2, value=round(value, 2))
         r += 1
     return r

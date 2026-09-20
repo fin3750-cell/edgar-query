@@ -1,6 +1,6 @@
 # edgar-query
 
-Type a ticker, get five years of standardized financial statements, fifteen
+Type a ticker, get five years of standardized financial statements, fourteen
 ratios, the DuPont decomposition, and market multiples — pulled live from SEC
 EDGAR's XBRL API. Download the whole thing as an Excel workbook with the
 formulas intact.
@@ -58,11 +58,11 @@ Other things it handles:
 - **Derivations.** Gross Profit, Total Liabilities, EBIT, combined
   goodwill/intangibles and gross PP&E are computed when not tagged directly, and
   marked `(derived)` in the Sources tab.
-- **Gross PP&E.** Fixed Asset Turnover divides revenue by the asset base a
-  company built, not by what is left after depreciation. Where a filer does not
-  tag gross PP&E — Target does not — it is derived as net + accumulated
-  depreciation. Both it and accumulated depreciation are written as memo rows
-  beneath the check row, so no existing formula reference shifts.
+- **Gross PP&E.** Still pulled and still derived as net + accumulated
+  depreciation where a filer does not tag it — Target does not. It feeds no
+  ratio any more, so it and accumulated depreciation are written as memo rows
+  beneath the check row, where they inform without shifting a formula
+  reference.
 
 ## The download
 
@@ -78,10 +78,6 @@ the repo. A worked variant existed briefly and went out as a student copy by
 mistake, because the button followed a dropdown several controls away. A URL that
 can be edited to hand back the answers is a URL someone will edit, so the safe
 design is for the capability not to exist.
-
-Fixed Asset Turnover is a special case: its row is not in the stock template and
-is added at build time. The label, formatting and fill are written so the sheet
-lists fifteen ratios and nobody silently builds fourteen.
 
 `/api/company/{ticker}` still takes `?mode=data`, which only affects the JSON and
 the on-screen market multiples — never the workbook.
@@ -103,7 +99,7 @@ arithmetic, not information.
 
 ## Industry benchmark
 
-Column H of the Ratios sheet carries the median of the same fifteen ratios
+Column H of the Ratios sheet carries the median of the same fourteen ratios
 across every other 10-K filer sharing the company's SIC code.
 
 It is computed here rather than taken from a published table, and that is the
@@ -114,7 +110,7 @@ than period-end balances, and lease-adjust the operating figures. Those are
 defensible choices and they are not the template's. A benchmark that does not
 share the formula it is benchmarking is a number that looks comparable and is
 not. They also publish no liquidity ratios and no asset turnover, which is seven
-of the fifteen rows.
+of the fourteen rows.
 
 So `tools/build_industry.py` runs SEC's Financial Statement Data Sets — the same
 XBRL facts behind `companyfacts`, published quarterly as a bulk download —
@@ -158,6 +154,55 @@ A few decisions worth knowing about:
   that report an inventory; Sources gives the per-ratio count so you can see
   which of the two you are reading.
 
+## The market block
+
+Under the DuPont section on the Ratios sheet: share price, shares outstanding,
+EPS, book value per share, market capitalisation, P/E and market-to-book.
+
+It has to look different from the four blocks above it, and it does. Everything
+else on that sheet divides one figure on Financial Data by another. P/E cannot —
+it needs a share price, which is not in a filing and not on that sheet. So the
+price and the share count arrive **filled in, in the template's yellow**: givens,
+like the Financial Data sheet itself. The five rows under them stay green and
+empty.
+
+The unit trap is the interesting part, and the hint column says so out loud.
+Financial Data is in millions, so the share count is given in millions too — then
+millions over millions gives dollars per share, and market cap comes out in
+millions to match the statements beside it.
+
+The block is appended below the existing rows rather than inserted, for the
+reason `_add_memo_rows` gives: inserting shifts everything beneath it, and
+openpyxl will not rewrite the fixed row references that Common-Size, Trend and
+Ratios point at.
+
+### Industry P/E and P/B
+
+These are the two industry figures SEC cannot supply — they need a market price
+for every filer, and EDGAR has none. They come from Damodaran's datasets at NYU
+Stern, free for non-commercial use with attribution, rebuilt each January.
+
+They sit in the market block's own column with its own heading, **not** in the
+`Industry median` column above. They are aggregates — industry market value over
+industry earnings and book value — from a different author over a different
+universe, and folding them in beside medians computed with the template's own
+formulas is exactly the thing this benchmark was built to avoid. The Sources tab
+says so in as many words.
+
+The aggregate is used rather than his average of company multiples on purpose:
+an average P/E across an industry holding loss-makers comes out at 132 for
+Advertising, which is a statistic about outliers. The join to SIC falls out of
+his own `indname.xls`, which lists every company with both its SIC code and his
+industry group.
+
+Reading `.xls` needs `xlrd`, which is **not** a runtime dependency and is not in
+`requirements.txt` — the build skips the multiples with a warning if it is
+missing, and the medians, which are the point, are unaffected.
+
+```bash
+pip install xlrd            # only to rebuild the table
+```
+
 ## Split adjustment
 
 An EPS series spanning a stock split is not a trend, it is two different units.
@@ -193,11 +238,6 @@ alongside as `eps_as_filed`.
   all.
 - `Operating Expenses` is frequently untagged. It feeds no ratio, so it is left
   blank rather than guessed at.
-- **Fixed Asset Turnover usually has no industry benchmark.** Only about 7% of
-  10-K filers tag gross PP&E or the accumulated depreciation it is derived from
-  — 315 of 4,309 in the 2026q1 data set — so most SIC codes cannot muster three.
-  The company's own column is unaffected; the Sources tab names the ratio and
-  says why it is blank rather than leaving an empty cell to be read as a bug.
 - **The industry table is a snapshot, not a series.** One figure per ratio,
   rebuilt when a new quarter is committed — there is no five-year industry
   trend to put beside the company's five columns.
@@ -231,5 +271,5 @@ edgar/workbook.py          fills the template, adds a Sources tab
 tools/build_industry.py    offline: bulk SEC data -> data/industry_ratios.json
 static/                    single-page frontend, no build step
 data/template.xlsx         Workbook template, analysis cells empty
-data/industry_ratios.json  Industry medians by SIC, committed, rebuilt quarterly
+data/industry_ratios.json  Industry medians by SIC, plus industry P/E and P/B, committed
 ```
