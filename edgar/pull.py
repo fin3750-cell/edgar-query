@@ -313,8 +313,9 @@ def _pull_fresh(ticker, nyears=5):
     data["Interest Expense"] = [None if v is None else abs(v)
                                 for v in data["Interest Expense"]]
 
-    shares, shares_asof = _shares_outstanding(dei)
     pends = period_ends(gaap, set(fys))
+    shares, shares_asof, shares_source = _shares_outstanding(
+        dei, extras, data, fys, [pends.get(y) for y in fys])
 
     return {
         "ticker": ticker.upper(),
@@ -327,12 +328,13 @@ def _pull_fresh(ticker, nyears=5):
         "extras": extras,
         "shares_outstanding": shares,
         "shares_asof": shares_asof,
+        "shares_source": shares_source,
         "mezzanine_note": mezz_note,
         "diagnostics": diagnose(data, fys),
     }
 
 
-def _shares_outstanding(dei):
+def _cover_page_shares(dei):
     """Latest cover-page share count and the date it was measured."""
     node = dei.get("EntityCommonStockSharesOutstanding")
     if not node:
@@ -343,6 +345,52 @@ def _shares_outstanding(dei):
             if best is None or e["end"] > best["end"]:
                 best = e
     return (best["val"], best["end"]) if best else (None, None)
+
+
+def _shares_outstanding(dei, extras, data, fys, pends):
+    """
+    Share count, the date it belongs to, and where it came from.
+
+    The cover-page tag (dei:EntityCommonStockSharesOutstanding) is the natural
+    source and is right for most filers, but some stop tagging it and never
+    resume: Nike's newest is from 2015, Hershey's from 2014. Taking "the latest"
+    from those gives a decade-old count -- and Nike's predates a 2-for-1 split,
+    so it silently understates market cap by 42% and inflates book value per
+    share to match. On the page it looked authoritative, date and all.
+
+    So the cover page is used only when it is at least as recent as the latest
+    fiscal year end. Otherwise fall back to the weighted-average diluted count
+    from that year's 10-K, which EDGAR restates for splits, and failing that
+    derive it from net income over diluted EPS -- which has the useful property
+    of agreeing with the statements printed beside it.
+
+    Returns (shares, asof, source), all None when nothing resolves; the market
+    block blanks itself rather than guess.
+    """
+    latest_end = None
+    for p in reversed(pends or []):
+        if p:
+            latest_end = p
+            break
+
+    shares, asof = _cover_page_shares(dei)
+    if shares and asof and (latest_end is None or asof >= latest_end):
+        return shares, asof, "cover page"
+
+    stale = " (cover page last tagged {})".format(asof) if asof else ""
+
+    wavg = (extras or {}).get("_shares") or []
+    if wavg and wavg[-1]:
+        return (wavg[-1], latest_end,
+                "weighted-average diluted shares, FY{}{}".format(fys[-1], stale))
+
+    eps = (extras or {}).get("_eps") or []
+    ni = (data or {}).get("Net Income") or []
+    if eps and ni and eps[-1] and ni[-1] is not None:
+        return (abs(ni[-1] / eps[-1]), latest_end,
+                "derived from net income / diluted EPS, FY{}{}".format(fys[-1], stale))
+
+    return None, None, None
 
 
 def pull(ticker, nyears=5):

@@ -138,6 +138,7 @@ def company(ticker: str, years: int = Query(5, ge=2, le=5),
         "statements": result["data"],
         "provenance": result["provenance"],
         "shares_asof": result["shares_asof"],
+        "shares_source": result["shares_source"],
         "mezzanine_note": result["mezzanine_note"],
         "diagnostics": result["diagnostics"],
     }

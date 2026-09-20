@@ -194,7 +194,7 @@ function render(d) {
     const dnote = (q.price === null
       ? "Price unavailable (" + (q.error || "no quote") + ")."
       : `Price from ${q.source}, delayed.`) +
-      ` Shares outstanding as of ${d.shares_asof} (10-Q/10-K cover page).` +
+      ` Shares outstanding as of ${d.shares_asof} (${d.shares_source || 'source unknown'}).` +
       " Market ratios are not computed in this mode.";
     outEl.appendChild(section("Market inputs", dnote, kpis));
     renderStatements(d, years);
@@ -220,7 +220,7 @@ function render(d) {
   } else {
     mnote = `Price from ${q.source}, delayed. Shares outstanding ` +
       `${(m.shares_outstanding || 0).toLocaleString()} as of ${d.shares_asof} ` +
-      `(10-Q/10-K cover page).`;
+      `(${d.shares_source || 'source unknown'}).`;
     if (m.eps_basis) mnote += ` EPS basis: ${m.eps_basis}.`;
     if (m.pe_note) mnote += ` P/E ${m.pe_note}.`;
   }

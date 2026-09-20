@@ -169,7 +169,6 @@ MEMO_ROWS = ["Property, Plant & Equipment (gross)", "Accumulated Depreciation"]
 
 BLOCKS = {
     "Interest Expense": "Times Interest Earned",
-    "Property, Plant & Equipment (gross)": "Fixed Asset Turnover",
     "Gross Profit": "Gross Margin",
     "Cost of Revenue (COGS)": "Inventory Turnover",
     "Cash & Short-Term Investments": "Cash Ratio",

@@ -23,8 +23,6 @@ SPEC = [
     ("Return on Equity (ROE)", "PROFITABILITY", "Net Income",                       "Total Shareholders' Equity", "%"),
     ("Inventory Turnover",    "EFFICIENCY",     "Cost of Revenue (COGS)",           "Inventory",                 "x"),
     ("Total Asset Turnover",  "EFFICIENCY",     "Revenue (Net Sales)",              "Total Assets",              "x"),
-    ("Fixed Asset Turnover",  "EFFICIENCY",     "Revenue (Net Sales)",
-     "Property, Plant & Equipment (gross)", "x"),
 ]
 
 

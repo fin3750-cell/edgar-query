@@ -35,7 +35,6 @@ def _row_index(ws):
 
 MEMO_HEADER_ROW = 43
 MEMO_LABELS = ["Property, Plant & Equipment (gross)", "Accumulated Depreciation"]
-FAT_ROW = 30                # blank spacer in the template, right after Total Asset Turnover
 REVENUE_ROW = 10
 
 # Ratios sheet: the years occupy C..G, H is a 2-wide spacer and I holds the
@@ -68,25 +67,6 @@ def _add_memo_rows(ws):
             ws.cell(row=r, column=col).number_format = \
                 ws.cell(row=26, column=col).number_format
 
-
-def _add_fixed_asset_turnover(ws_ratios, nyears):
-    """
-    Fixed Asset Turnover = Revenue / Gross PP&E, in the EFFICIENCY block.
-
-    Label, formatting and fill only. This row is added at build time rather than
-    living in the stock template, so without it the sheet would list fourteen
-    ratios and the reader would never know one was missing.
-    """
-    src = ws_ratios.cell(row=29, column=1)   # Total Asset Turnover
-    c = ws_ratios.cell(row=FAT_ROW, column=1, value="Fixed Asset Turnover")
-    c.font = src.font.copy()
-    for i, col in enumerate(YCOL[:nyears]):
-        cell = ws_ratios[col + str(FAT_ROW)]
-        model = ws_ratios[col + "29"]
-        cell.number_format = model.number_format
-        # Match the row above so the cell reads as one to fill in.
-        cell.fill = model.fill.copy()
-        cell.border = model.border.copy()
 
 
 def _write_benchmark(ws, bench):
@@ -151,7 +131,6 @@ def build(result, scale=1e6, units="Millions USD", bench=None):
     wb = openpyxl.load_workbook(TEMPLATE)
     ws = wb["Financial Data"]
     _add_memo_rows(ws)
-    _add_fixed_asset_turnover(wb["Ratios"], len(result["fiscal_years"]))
     _write_benchmark(wb["Ratios"], bench)
     rows = _row_index(ws)
 
