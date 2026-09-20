@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from edgar import pull as pull_mod
-from edgar import market, ratios, workbook
+from edgar import market, ratios, workbook, industry
 
 log = logging.getLogger("uvicorn.error")
 
@@ -88,9 +88,18 @@ def healthz():
     # only show up as a 502 on the first download, which is far too late. A
     # template was once dropped by a .gitignore rule exactly this way.
     template_ok = os.path.exists(workbook.TEMPLATE)
+    # The industry table is reported but does not gate `ok`. Losing it degrades
+    # one column of one sheet and fails soft; losing the template breaks every
+    # download. Same reasoning as the template check, though -- a data file
+    # dropped from the deploy is otherwise invisible until someone notices a
+    # column that quietly stopped appearing.
+    tbl = industry.table()
     return {"ok": template_ok,
             "sec_contact_configured": configured,
             "template": template_ok,
+            "industry": {"loaded": tbl is not None,
+                         "built": (tbl or {}).get("built"),
+                         "codes": len((tbl or {}).get("industries", {}))},
             "asset_version": asset_version(),
             "cache": pull_mod.cache_stats()}
 
@@ -161,9 +170,14 @@ def company_xlsx(ticker: str, years: int = Query(5, ge=2, le=5)):
 
     There is no worked variant and no mode switch here on purpose -- a URL that
     could be edited to hand back the answers is a URL someone will edit.
+
+    The industry column is the one exception to "analysis sheets are empty", and
+    it is not an answer -- it is a given, like the share price. Knowing the
+    industry's median current ratio tells you nothing about this company's until
+    you have worked yours out.
     """
     result = _pull(ticker, years)
-    buf, fname = workbook.build(result)
+    buf, fname = workbook.build(result, bench=industry.benchmark(result["cik"]))
     return StreamingResponse(
         buf, media_type=XLSX_MIME,
         headers={"Content-Disposition": 'attachment; filename="{}"'.format(fname)})

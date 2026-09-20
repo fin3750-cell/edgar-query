@@ -13,6 +13,8 @@ import os
 import datetime
 import openpyxl
 
+from . import ratios
+
 _DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 TEMPLATE = os.path.join(_DATA, "template.xlsx")
 YCOL = ["C", "D", "E", "F", "G"]        # the template holds five years
@@ -35,6 +37,14 @@ MEMO_HEADER_ROW = 43
 MEMO_LABELS = ["Property, Plant & Equipment (gross)", "Accumulated Depreciation"]
 FAT_ROW = 30                # blank spacer in the template, right after Total Asset Turnover
 REVENUE_ROW = 10
+
+# Ratios sheet: the years occupy C..G, H is a 2-wide spacer and I holds the
+# formula hints. The benchmark goes in H, widened -- to the right of the
+# company's own years and to the left of the hint that says how to compute
+# them, which is where a reader looks after filling a row in.
+BENCH_COL = "H"
+BENCH_HEADER_ROW = 8
+BENCH_NOTE_ROWS = (4, 5)
 
 
 def _add_memo_rows(ws):
@@ -79,15 +89,70 @@ def _add_fixed_asset_turnover(ws_ratios, nyears):
         cell.border = model.border.copy()
 
 
-def build(result, scale=1e6, units="Millions USD"):
+def _write_benchmark(ws, bench):
+    """
+    The industry median column, and a two-line caption saying what it is.
+
+    The caption is not decoration. A median is only as good as the number of
+    filers under it and how wide a net was cast to find them, and both vary a
+    lot by industry -- so the level, the count and the vintage go on the face of
+    the sheet rather than being left for someone to go looking for.
+
+    When there is no benchmark the caption still gets written, saying why. A
+    column that is silently absent reads as a bug.
+    """
+    note_a, note_b = BENCH_NOTE_ROWS
+    hint_font = ws["A2"].font.copy()
+
+    if not bench or not bench.get("available"):
+        ws["A" + str(note_a)] = "Industry benchmark: not available for this company."
+        ws["A" + str(note_a)].font = hint_font
+        if bench and bench.get("note"):
+            ws["A" + str(note_b)] = bench["note"]
+            ws["A" + str(note_b)].font = hint_font
+        return
+
+    ws["A" + str(note_a)] = "Industry benchmark  -  {} ({} {}), median of {} 10-K filers".format(
+        bench["name"], bench["level"], bench["code"], bench["filers"])
+    ws["A" + str(note_a)].font = hint_font
+    ws["A" + str(note_b)] = (
+        "Column {} below. SEC Financial Statement Data Sets {}, built {}. Same XBRL tags "
+        "and the same formulas as your own columns, so the two are comparable."
+        .format(BENCH_COL, "/".join(bench.get("quarters") or []), bench.get("built") or "?"))
+    ws["A" + str(note_b)].font = hint_font
+
+    head = ws[BENCH_COL + str(BENCH_HEADER_ROW)]
+    head.value = "Industry median"
+    head.font = ws["C" + str(BENCH_HEADER_ROW)].font.copy()
+    head.alignment = ws["C" + str(BENCH_HEADER_ROW)].alignment.copy()
+
+    rows = _row_index(ws)
+    for label, entry in bench["ratios"].items():
+        r = rows.get(label)
+        if not r or entry.get("median") is None:
+            continue
+        model = ws["C" + str(r)]
+        cell = ws[BENCH_COL + str(r)]
+        cell.value = round(entry["median"], 4)
+        cell.number_format = model.number_format
+        cell.border = model.border.copy()
+        # Deliberately NOT the model's fill. The green on C..G means "you fill
+        # this in"; this column is already filled, and should not invite edits.
+
+    ws.column_dimensions[BENCH_COL].width = 15
+
+
+def build(result, scale=1e6, units="Millions USD", bench=None):
     """
     result: the dict returned by pull.pull()
+    bench:  industry.benchmark(cik), or None to omit the benchmark column
     Returns (BytesIO, filename).
     """
     wb = openpyxl.load_workbook(TEMPLATE)
     ws = wb["Financial Data"]
     _add_memo_rows(ws)
     _add_fixed_asset_turnover(wb["Ratios"], len(result["fiscal_years"]))
+    _write_benchmark(wb["Ratios"], bench)
     rows = _row_index(ws)
 
     fys = result["fiscal_years"]
@@ -111,7 +176,7 @@ def build(result, scale=1e6, units="Millions USD"):
             if v is not None:
                 ws[col + str(r)] = round(v / scale, 1)
 
-    _write_provenance(wb, result)
+    _write_provenance(wb, result, bench)
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -122,7 +187,7 @@ def build(result, scale=1e6, units="Millions USD"):
     return buf, fname
 
 
-def _write_provenance(wb, result):
+def _write_provenance(wb, result, bench=None):
     """
     A Sources tab naming the XBRL tag behind every year of every row.
 
@@ -175,6 +240,65 @@ def _write_provenance(wb, result):
         ws.cell(row=r, column=1, value="Adjustment")
         ws.cell(row=r, column=2, value=result["mezzanine_note"])
 
+    r = _write_benchmark_sources(ws, r + 2, bench)
+
     ws.column_dimensions["A"].width = 44
     for col in "BCDEFG":
         ws.column_dimensions[col].width = 30
+
+
+def _write_benchmark_sources(ws, r, bench):
+    """
+    Where the industry column came from, and how thin it is per ratio.
+
+    The per-ratio count is the part worth printing. A SIC with forty filers
+    behind it can still have eight reporting an inventory, and Inventory
+    Turnover for that industry is then a median of eight -- which is a different
+    claim from the forty at the top of the block.
+    """
+    ws.cell(row=r, column=1, value="Industry benchmark")
+    if not bench or not bench.get("available"):
+        ws.cell(row=r, column=2,
+                value=(bench or {}).get("note") or "not available for this company")
+        return r + 1
+    r += 1
+
+    for label, value in (
+            ("Industry", "{} ({} {})".format(bench["name"], bench["level"], bench["code"])),
+            ("SIC reported by SEC", "{}{}".format(
+                bench["sic"],
+                "  -  " + bench["sic_description"] if bench.get("sic_description") else "")),
+            ("Filers in the median", bench["filers"]),
+            ("Source", "SEC Financial Statement Data Sets, {}".format(
+                ", ".join(bench.get("quarters") or []) or "unknown quarters")),
+            ("Table built", bench.get("built") or "unknown"),
+            ("Method", "Median across filers, same XBRL tags and same formulas as "
+                       "the columns above. One 10-K per filer."),
+    ):
+        ws.cell(row=r, column=1, value=label)
+        ws.cell(row=r, column=2, value=value)
+        r += 1
+
+    r += 1
+    ws.cell(row=r, column=1, value="Ratio")
+    ws.cell(row=r, column=2, value="Industry median")
+    ws.cell(row=r, column=3, value="Filers reporting it")
+    r += 1
+    for label, _group, _n, _d, _fmt in ratios.SPEC:
+        entry = bench["ratios"].get(label)
+        ws.cell(row=r, column=1, value=label)
+        if entry:
+            ws.cell(row=r, column=2, value=round(entry["median"], 4)
+                    if entry.get("median") is not None else None)
+            ws.cell(row=r, column=3, value=entry.get("n"))
+        else:
+            # Named explicitly rather than left out. A blank cell in column H
+            # reads as a bug; "too few filers report the inputs" reads as a
+            # fact about the data, which is what it is. Fixed Asset Turnover
+            # lands here for most industries -- barely any filer tags gross
+            # PP&E, and only some tag the accumulated depreciation it is
+            # derived from.
+            ws.cell(row=r, column=2, value="no benchmark")
+            ws.cell(row=r, column=3, value="too few filers report the inputs")
+        r += 1
+    return r
