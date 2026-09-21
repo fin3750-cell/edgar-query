@@ -258,6 +258,30 @@ it is marked `sync: false` so it never lands in git.
 The free tier sleeps after 15 minutes idle; the first request after that takes
 roughly 50 seconds to wake.
 
+### Did the deploy land?
+
+`/healthz` reports the running commit:
+
+```json
+{"ok": true, "commit": "dd4cbea", "template": true,
+ "industry": {"loaded": true, "built": "2026-09-19", "codes": 676},
+ "asset_version": "d10db6f24f", "cache": {...}}
+```
+
+Compare `commit` against `git rev-parse --short=7 HEAD`. It exists because
+nothing else in that payload moves when a Python file changes — `asset_version`
+only hashes the frontend, so a fix to a tag list or a ratio used to ship
+completely invisibly, and the only way to confirm it was to think of some
+behaviour that had changed and go looking for it.
+
+On Render it comes from `RENDER_GIT_COMMIT`. Off Render it is read straight out
+of `.git` — no subprocess, once per process. If neither is available it is
+`null`, which is the honest answer rather than a guess. It never gates `ok`:
+not knowing which commit you are on is not a reason to fail a health check.
+
+`industry.loaded` is worth a glance on the first deploy after rebuilding the
+table — it confirms `data/industry_ratios.json` actually shipped.
+
 ## Layout
 
 ```

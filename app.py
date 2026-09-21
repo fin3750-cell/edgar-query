@@ -97,6 +97,7 @@ def healthz():
     return {"ok": template_ok,
             "sec_contact_configured": configured,
             "template": template_ok,
+            "commit": commit_sha(),
             "industry": {"loaded": tbl is not None,
                          "built": (tbl or {}).get("built"),
                          "codes": len((tbl or {}).get("industries", {}))},
@@ -198,6 +199,68 @@ def _pull(ticker, years):
     except Exception as exc:                        # noqa: BLE001
         log.exception("pull failed for %s", ticker)
         raise HTTPException(502, "EDGAR request failed: {}".format(exc))
+
+
+_commit_cache = []
+
+
+def commit_sha():
+    """
+    Short SHA of the running code, or None if it cannot be determined.
+
+    Worth having because /healthz otherwise cannot answer "did my deploy land?".
+    A change to any Python file leaves the whole payload byte-identical --
+    asset_version only hashes the frontend -- so a fix to a tag list or a ratio
+    ships invisibly, and the only way to tell was to find some behaviour that
+    changed and go looking for it.
+
+    Render sets RENDER_GIT_COMMIT. Off Render there is no such variable, so fall
+    back to reading .git directly: no subprocess, and it costs one or two small
+    file reads, once per process. Both can fail -- a container built without the
+    repo has neither -- and None is the honest answer when they do.
+    """
+    if _commit_cache:
+        return _commit_cache[0]
+
+    sha = (os.environ.get("RENDER_GIT_COMMIT") or "").strip()
+    if not sha:
+        sha = _sha_from_git_dir()
+    value = sha[:7] if sha else None
+    _commit_cache.append(value)
+    return value
+
+
+def _sha_from_git_dir():
+    """Resolve HEAD by hand. Handles a detached HEAD and packed refs."""
+    git = os.path.join(HERE, ".git")
+    try:
+        with open(os.path.join(git, "HEAD"), encoding="utf-8") as fh:
+            head = fh.read().strip()
+    except OSError:
+        return ""
+
+    if not head.startswith("ref:"):
+        return head                                  # detached: HEAD is the SHA
+
+    ref = head[4:].strip()
+    try:
+        with open(os.path.join(git, *ref.split("/")), encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        pass
+
+    # A fresh clone packs its refs away, so loose ref files may not exist.
+    try:
+        with open(os.path.join(git, "packed-refs"), encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith(("#", "^")):
+                    continue
+                parts = line.split()
+                if len(parts) == 2 and parts[1] == ref:
+                    return parts[0]
+    except OSError:
+        pass
+    return ""
 
 
 ASSET_FILES = ("index.html", "app.js", "style.css")
