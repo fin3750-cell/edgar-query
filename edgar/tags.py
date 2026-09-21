@@ -155,12 +155,20 @@ MEZZANINE = [
 ]
 
 # Rows the ratio sheet actually consumes. A gap here blocks a ratio.
+#
+# Gross PP&E is deliberately NOT in this list. It was, while Fixed Asset
+# Turnover existed; once that ratio went, a missing gross PP&E was still
+# counted against the total and still reported as blocking "several ratios" --
+# the default string, since BLOCKS had no entry for it either. It blocks
+# nothing now. It is still pulled, still derived and still written as a memo
+# row; it simply is not a ratio input, so do not add it back without a ratio
+# that consumes it.
 RATIO_INPUTS = [
     "Revenue (Net Sales)", "Cost of Revenue (COGS)", "Gross Profit",
     "Operating Income (EBIT)", "Interest Expense", "Net Income",
     "Cash & Short-Term Investments", "Inventory", "Total Current Assets",
     "Total Assets", "Total Current Liabilities", "Total Liabilities",
-    "Total Shareholders' Equity", "Property, Plant & Equipment (gross)",
+    "Total Shareholders' Equity",
 ]
 
 # Memo rows: pulled and reported, but excluded from the balance-sheet display
